@@ -311,17 +311,17 @@ class _HomePageState extends State<HomePage> {
 
         // Load counts
         final contacts = await Supabase.instance.client
-            .from('contacts')
+            .from('sms_gateway.contacts')
             .select('id')
             .eq('user_id', authUser.id);
 
         final groups = await Supabase.instance.client
-            .from('groups')
+            .from('sms_gateway.groups')
             .select('id')
             .eq('user_id', authUser.id);
 
         final logs = await Supabase.instance.client
-            .from('sms_logs')
+            .from('sms_gateway.sms_logs')
             .select('id')
             .eq('user_id', authUser.id);
 

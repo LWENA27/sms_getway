@@ -26,7 +26,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
       if (userId == null) return;
 
       final response = await Supabase.instance.client
-          .from('contacts')
+          .from('sms_gateway.contacts')
           .select()
           .eq('user_id', userId);
 
@@ -167,7 +167,7 @@ class _AddContactDialogState extends State<AddContactDialog> {
         createdAt: DateTime.now(),
       );
 
-      await Supabase.instance.client.from('contacts').insert(contact.toJson());
+      await Supabase.instance.client.from('sms_gateway.contacts').insert(contact.toJson());
 
       if (mounted) {
         widget.onAdd(contact);

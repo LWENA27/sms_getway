@@ -35,12 +35,12 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
       if (userId == null) return;
 
       final contacts = await Supabase.instance.client
-          .from('contacts')
+          .from('sms_gateway.contacts')
           .select()
           .eq('user_id', userId);
 
       final groups = await Supabase.instance.client
-          .from('groups')
+          .from('sms_gateway.groups')
           .select()
           .eq('user_id', userId);
 
@@ -77,7 +77,7 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
     } else if (selectedMode == 'group' && selectedGroupId != null) {
       try {
         final memberIds = await Supabase.instance.client
-            .from('group_members')
+            .from('sms_gateway.group_members')
             .select('contact_id')
             .eq('group_id', selectedGroupId!);
 
@@ -85,7 +85,7 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
             (memberIds as List).map((m) => m['contact_id'] as String).toList();
 
         final contacts = await Supabase.instance.client
-            .from('contacts')
+            .from('sms_gateway.contacts')
             .select()
             .inFilter('id', contactIds);
 
@@ -145,7 +145,7 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
           );
 
           await Supabase.instance.client
-              .from('sms_logs')
+              .from('sms_gateway.sms_logs')
               .insert(smsLog.toJson());
 
           successCount++;
