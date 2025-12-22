@@ -2,20 +2,22 @@
 class SmsLog {
   final String id;
   final String userId;
-  final String sender; // Phone number or sender ID
-  final String recipient; // Phone number
+  final String? contactId;
+  final String phoneNumber;
   final String message;
   final String status; // sent, failed, delivered, pending
+  final DateTime? sentAt;
   final String? errorMessage;
   final DateTime createdAt;
 
   SmsLog({
     required this.id,
     required this.userId,
-    required this.sender,
-    required this.recipient,
+    this.contactId,
+    required this.phoneNumber,
     required this.message,
     required this.status,
+    this.sentAt,
     this.errorMessage,
     required this.createdAt,
   });
@@ -25,10 +27,13 @@ class SmsLog {
     return SmsLog(
       id: json['id'] as String,
       userId: json['user_id'] as String,
-      sender: json['sender'] as String,
-      recipient: json['recipient'] as String,
+      contactId: json['contact_id'] as String?,
+      phoneNumber: json['phone_number'] ?? json['recipient'] as String,
       message: json['message'] as String,
       status: json['status'] as String,
+      sentAt: json['sent_at'] != null
+          ? DateTime.parse(json['sent_at'] as String)
+          : null,
       errorMessage: json['error_message'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
@@ -36,32 +41,37 @@ class SmsLog {
 
   /// Convert SmsLog to JSON (for sending to API)
   Map<String, dynamic> toJson() => {
-    'user_id': userId,
-    'sender': sender,
-    'recipient': recipient,
-    'message': message,
-    'status': status,
-    'error_message': errorMessage,
-  };
+        'id': id,
+        'user_id': userId,
+        'contact_id': contactId,
+        'phone_number': phoneNumber,
+        'message': message,
+        'status': status,
+        'sent_at': sentAt?.toIso8601String(),
+        'error_message': errorMessage,
+        'created_at': createdAt.toIso8601String(),
+      };
 
   /// Create a copy of SmsLog with modified fields
   SmsLog copyWith({
     String? id,
     String? userId,
-    String? sender,
-    String? recipient,
+    String? contactId,
+    String? phoneNumber,
     String? message,
     String? status,
+    DateTime? sentAt,
     String? errorMessage,
     DateTime? createdAt,
   }) {
     return SmsLog(
       id: id ?? this.id,
       userId: userId ?? this.userId,
-      sender: sender ?? this.sender,
-      recipient: recipient ?? this.recipient,
+      contactId: contactId ?? this.contactId,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
       message: message ?? this.message,
       status: status ?? this.status,
+      sentAt: sentAt ?? this.sentAt,
       errorMessage: errorMessage ?? this.errorMessage,
       createdAt: createdAt ?? this.createdAt,
     );
@@ -74,7 +84,7 @@ class SmsLog {
 
   @override
   String toString() =>
-      'SmsLog(id: $id, recipient: $recipient, status: $status, sent: ${createdAt.toLocal()})';
+      'SmsLog(id: $id, phoneNumber: $phoneNumber, status: $status, sent: ${createdAt.toLocal()})';
 
   @override
   bool operator ==(Object other) =>

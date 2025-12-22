@@ -3,6 +3,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/constants.dart';
 import 'core/theme.dart';
 import 'auth/user_model.dart' as auth_models;
+import 'screens/contacts_screen.dart';
+import 'screens/groups_screen.dart';
+import 'screens/bulk_sms_screen.dart';
+import 'screens/sms_logs_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -285,6 +289,7 @@ class _HomePageState extends State<HomePage> {
   int groupCount = 0;
   int smsLogCount = 0;
   bool isLoading = true;
+  int _currentIndex = 0;
 
   @override
   void initState() {
@@ -341,9 +346,18 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final screens = [
+      _buildDashboard(),
+      const ContactsScreen(),
+      const GroupsScreen(),
+      const BulkSmsScreen(),
+      const SmsLogsScreen(),
+    ];
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('SMS Gateway'),
+        elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
@@ -351,170 +365,203 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-      body: isLoading
-          ? const Center(
-              child: CircularProgressIndicator(),
-            )
-          : RefreshIndicator(
-              onRefresh: () async {
-                _loadData();
-              },
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(AppTheme.paddingLarge),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Welcome card
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(AppTheme.paddingLarge),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Welcome! 👋',
-                              style: Theme.of(context).textTheme.headlineSmall,
-                            ),
-                            const SizedBox(
-                              height: AppTheme.paddingSmall,
-                            ),
-                            Text(
-                              currentUser?.email ?? 'User',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
-                                  ?.copyWith(
-                                    color: Colors.grey[600],
-                                  ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: AppTheme.paddingLarge),
-                    // Statistics
-                    Text(
-                      'Quick Stats',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: AppTheme.paddingMedium),
-                    GridView.count(
-                      crossAxisCount: 2,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      mainAxisSpacing: AppTheme.paddingMedium,
-                      crossAxisSpacing: AppTheme.paddingMedium,
-                      children: [
-                        _buildStatCard(
-                          context,
-                          icon: Icons.contacts,
-                          label: 'Contacts',
-                          value: '$contactCount',
-                          color: Colors.blue,
-                        ),
-                        _buildStatCard(
-                          context,
-                          icon: Icons.group,
-                          label: 'Groups',
-                          value: '$groupCount',
-                          color: Colors.green,
-                        ),
-                        _buildStatCard(
-                          context,
-                          icon: Icons.mail,
-                          label: 'SMS Logs',
-                          value: '$smsLogCount',
-                          color: Colors.orange,
-                        ),
-                        _buildStatCard(
-                          context,
-                          icon: Icons.info,
-                          label: 'Status',
-                          value: 'Active',
-                          color: Colors.purple,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppTheme.paddingLarge),
-                    // Features
-                    Text(
-                      'Available Features (Phase 1)',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: AppTheme.paddingMedium),
-                    _buildFeatureItem(
-                      context,
-                      icon: Icons.person_add,
-                      title: 'Add Contacts',
-                      description: 'Manage your contact list',
-                      isDone: true,
-                    ),
-                    _buildFeatureItem(
-                      context,
-                      icon: Icons.file_upload,
-                      title: 'Import CSV',
-                      description: 'Bulk import contacts',
-                      isDone: true,
-                    ),
-                    _buildFeatureItem(
-                      context,
-                      icon: Icons.group_add,
-                      title: 'Create Groups',
-                      description: 'Organize contacts',
-                      isDone: true,
-                    ),
-                    _buildFeatureItem(
-                      context,
-                      icon: Icons.send,
-                      title: 'Send SMS',
-                      description: 'Bulk SMS sending',
-                      isDone: true,
-                    ),
-                    _buildFeatureItem(
-                      context,
-                      icon: Icons.history,
-                      title: 'SMS Logs',
-                      description: 'Track sent messages',
-                      isDone: true,
-                    ),
-                    const SizedBox(height: AppTheme.paddingLarge),
-                    // Info box
-                    Container(
-                      padding: const EdgeInsets.all(AppTheme.paddingMedium),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryColor.withOpacity(0.1),
-                        borderRadius:
-                            BorderRadius.circular(AppTheme.radiusMedium),
-                        border: Border.all(color: AppTheme.primaryColor),
-                      ),
+      body: screens[_currentIndex],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        type: BottomNavigationBarType.fixed,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.contacts),
+            label: 'Contacts',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.group),
+            label: 'Groups',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.send),
+            label: 'Send',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.history),
+            label: 'Logs',
+          ),
+        ],
+        onTap: (index) {
+          setState(() => _currentIndex = index);
+        },
+      ),
+    );
+  }
+
+  Widget _buildDashboard() {
+    return isLoading
+        ? const Center(
+            child: CircularProgressIndicator(),
+          )
+        : RefreshIndicator(
+            onRefresh: () async {
+              _loadData();
+            },
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(AppTheme.paddingLarge),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Welcome card
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppTheme.paddingLarge),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '✅ System Status',
-                            style: Theme.of(context).textTheme.titleMedium,
+                            'Welcome! 👋',
+                            style: Theme.of(context).textTheme.headlineSmall,
                           ),
-                          const SizedBox(height: AppTheme.paddingSmall),
-                          Text(
-                            '✓ Supabase connected',
-                            style: Theme.of(context).textTheme.bodySmall,
+                          const SizedBox(
+                            height: AppTheme.paddingSmall,
                           ),
                           Text(
-                            '✓ Authentication working',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                          Text(
-                            '✓ Database accessible',
-                            style: Theme.of(context).textTheme.bodySmall,
+                            currentUser?.email ?? 'User',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: Colors.grey[600],
+                                ),
                           ),
                         ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: AppTheme.paddingLarge),
+                  // Statistics
+                  Text(
+                    'Quick Stats',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: AppTheme.paddingMedium),
+                  GridView.count(
+                    crossAxisCount: 2,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    mainAxisSpacing: AppTheme.paddingMedium,
+                    crossAxisSpacing: AppTheme.paddingMedium,
+                    children: [
+                      _buildStatCard(
+                        context,
+                        icon: Icons.contacts,
+                        label: 'Contacts',
+                        value: '$contactCount',
+                        color: Colors.blue,
+                      ),
+                      _buildStatCard(
+                        context,
+                        icon: Icons.group,
+                        label: 'Groups',
+                        value: '$groupCount',
+                        color: Colors.green,
+                      ),
+                      _buildStatCard(
+                        context,
+                        icon: Icons.mail,
+                        label: 'SMS Logs',
+                        value: '$smsLogCount',
+                        color: Colors.orange,
+                      ),
+                      _buildStatCard(
+                        context,
+                        icon: Icons.info,
+                        label: 'Status',
+                        value: 'Active',
+                        color: Colors.purple,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppTheme.paddingLarge),
+                  // Features
+                  Text(
+                    'Available Features (Phase 1)',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: AppTheme.paddingMedium),
+                  _buildFeatureItem(
+                    context,
+                    icon: Icons.person_add,
+                    title: 'Add Contacts',
+                    description: 'Manage your contact list',
+                    isDone: true,
+                  ),
+                  _buildFeatureItem(
+                    context,
+                    icon: Icons.file_upload,
+                    title: 'Import CSV',
+                    description: 'Bulk import contacts',
+                    isDone: true,
+                  ),
+                  _buildFeatureItem(
+                    context,
+                    icon: Icons.group_add,
+                    title: 'Create Groups',
+                    description: 'Organize contacts',
+                    isDone: true,
+                  ),
+                  _buildFeatureItem(
+                    context,
+                    icon: Icons.send,
+                    title: 'Send SMS',
+                    description: 'Bulk SMS sending',
+                    isDone: true,
+                  ),
+                  _buildFeatureItem(
+                    context,
+                    icon: Icons.history,
+                    title: 'SMS Logs',
+                    description: 'Track sent messages',
+                    isDone: true,
+                  ),
+                  const SizedBox(height: AppTheme.paddingLarge),
+                  // Info box
+                  Container(
+                    padding: const EdgeInsets.all(AppTheme.paddingMedium),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withOpacity(0.1),
+                      borderRadius:
+                          BorderRadius.circular(AppTheme.radiusMedium),
+                      border: Border.all(color: AppTheme.primaryColor),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '✅ System Status',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: AppTheme.paddingSmall),
+                        Text(
+                          '✓ Supabase connected',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        Text(
+                          '✓ Authentication working',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        Text(
+                          '✓ Database accessible',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-    );
+          );
   }
 
   Widget _buildStatCard(

@@ -2,16 +2,16 @@
 class Group {
   final String id;
   final String userId;
-  final String groupName;
+  final String name;
   final DateTime createdAt;
-  final List<String> memberIds; // Contact IDs in this group
+  final int? memberCount;
 
   Group({
     required this.id,
     required this.userId,
-    required this.groupName,
+    required this.name,
     required this.createdAt,
-    this.memberIds = const [],
+    this.memberCount,
   });
 
   /// Create Group from JSON (Supabase response)
@@ -19,34 +19,38 @@ class Group {
     return Group(
       id: json['id'] as String,
       userId: json['user_id'] as String,
-      groupName: json['group_name'] as String,
+      name: json['name'] ?? json['group_name'] as String,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
 
   /// Convert Group to JSON (for sending to API)
-  Map<String, dynamic> toJson() => {'user_id': userId, 'group_name': groupName};
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'user_id': userId,
+        'name': name,
+        'created_at': createdAt.toIso8601String(),
+      };
 
   /// Create a copy of Group with modified fields
   Group copyWith({
     String? id,
     String? userId,
-    String? groupName,
+    String? name,
     DateTime? createdAt,
-    List<String>? memberIds,
+    int? memberCount,
   }) {
     return Group(
       id: id ?? this.id,
       userId: userId ?? this.userId,
-      groupName: groupName ?? this.groupName,
+      name: name ?? this.name,
       createdAt: createdAt ?? this.createdAt,
-      memberIds: memberIds ?? this.memberIds,
+      memberCount: memberCount ?? this.memberCount,
     );
   }
 
   @override
-  String toString() =>
-      'Group(id: $id, name: $groupName, members: ${memberIds.length})';
+  String toString() => 'Group(id: $id, name: $name, members: $memberCount)';
 
   @override
   bool operator ==(Object other) =>
@@ -54,10 +58,10 @@ class Group {
       other is Group &&
           runtimeType == other.runtimeType &&
           id == other.id &&
-          groupName == other.groupName;
+          name == other.name;
 
   @override
-  int get hashCode => id.hashCode ^ groupName.hashCode;
+  int get hashCode => id.hashCode ^ name.hashCode;
 }
 
 /// GroupMember Model (joining table)
@@ -88,9 +92,9 @@ class GroupMember {
 
   /// Convert GroupMember to JSON (for sending to API)
   Map<String, dynamic> toJson() => {
-    'group_id': groupId,
-    'contact_id': contactId,
-  };
+        'group_id': groupId,
+        'contact_id': contactId,
+      };
 
   @override
   String toString() => 'GroupMember(groupId: $groupId, contactId: $contactId)';
