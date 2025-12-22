@@ -244,7 +244,8 @@ class _SmsLogsScreenState extends State<SmsLogsScreen> {
               const SizedBox(height: 12),
               _buildDetailRow('Status:', log.status),
               const SizedBox(height: 12),
-              _buildDetailRow('Sent At:', _formatDateTime(log.sentAt ?? log.createdAt)),
+              _buildDetailRow(
+                  'Sent At:', _formatDateTime(log.sentAt ?? log.createdAt)),
               const SizedBox(height: 12),
               Text(
                 'Message:',

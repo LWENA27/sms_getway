@@ -167,7 +167,9 @@ class _AddContactDialogState extends State<AddContactDialog> {
         createdAt: DateTime.now(),
       );
 
-      await Supabase.instance.client.from('sms_gateway.contacts').insert(contact.toJson());
+      await Supabase.instance.client
+          .from('sms_gateway.contacts')
+          .insert(contact.toJson());
 
       if (mounted) {
         widget.onAdd(contact);

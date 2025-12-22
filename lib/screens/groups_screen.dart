@@ -220,7 +220,9 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
         memberCount: selectedContacts.length,
       );
 
-      await Supabase.instance.client.from('sms_gateway.groups').insert(group.toJson());
+      await Supabase.instance.client
+          .from('sms_gateway.groups')
+          .insert(group.toJson());
 
       // Add members
       for (final contact in selectedContacts) {
