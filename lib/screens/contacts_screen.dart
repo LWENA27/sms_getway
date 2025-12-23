@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 import '../core/theme.dart';
+import '../core/tenant_service.dart';
 import '../contacts/contact_model.dart';
 import '../groups/group_model.dart';
 
@@ -54,19 +55,19 @@ class _ContactsScreenState extends State<ContactsScreen>
 
   void _loadContacts() async {
     try {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) {
-        debugPrint('❌ No user logged in');
+      final tenantId = TenantService().tenantId;
+      if (tenantId == null) {
+        debugPrint('❌ No tenant selected');
         return;
       }
 
-      debugPrint('📱 Loading contacts for user: $userId');
+      debugPrint('📱 Loading contacts for tenant: $tenantId');
 
       final response = await Supabase.instance.client
           .schema('sms_gateway')
           .from('contacts')
           .select()
-          .eq('user_id', userId);
+          .eq('tenant_id', tenantId);
 
       debugPrint('✅ Loaded ${(response as List).length} contacts');
 
@@ -90,14 +91,14 @@ class _ContactsScreenState extends State<ContactsScreen>
 
   void _loadGroups() async {
     try {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) return;
+      final tenantId = TenantService().tenantId;
+      if (tenantId == null) return;
 
       final response = await Supabase.instance.client
           .schema('sms_gateway')
           .from('groups')
           .select('*, group_members(id)')
-          .eq('user_id', userId);
+          .eq('tenant_id', tenantId);
 
       if (mounted) {
         setState(() {
@@ -812,24 +813,17 @@ class _ContactsScreenState extends State<ContactsScreen>
     try {
       // Get user info
       final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) {
+      final tenantId = TenantService().tenantId;
+      if (userId == null || tenantId == null) {
         if (mounted) {
           Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('User not logged in')),
+            const SnackBar(
+                content: Text('User not logged in or no tenant selected')),
           );
         }
         return;
       }
-
-      // Get tenant_id
-      final userProfile = await Supabase.instance.client
-          .schema('sms_gateway')
-          .from('users')
-          .select('tenant_id')
-          .eq('id', userId)
-          .single();
-      final tenantId = userProfile['tenant_id'] as String;
 
       int imported = 0;
       int skipped = 0;
@@ -1352,17 +1346,9 @@ class _AddContactDialogState extends State<AddContactDialog> {
 
     try {
       final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) throw 'User not found';
-
-      // Get tenant_id from sms_gateway.users
-      final userProfile = await Supabase.instance.client
-          .schema('sms_gateway')
-          .from('users')
-          .select('tenant_id')
-          .eq('id', userId)
-          .single();
-
-      final tenantId = userProfile['tenant_id'] as String;
+      final tenantId = TenantService().tenantId;
+      if (userId == null || tenantId == null)
+        throw 'User not logged in or no tenant selected';
 
       final contact = Contact(
         id: const Uuid().v4(),
@@ -1477,14 +1463,14 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
 
   void _loadAvailableContacts() async {
     try {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) return;
+      final tenantId = TenantService().tenantId;
+      if (tenantId == null) return;
 
       final response = await Supabase.instance.client
           .schema('sms_gateway')
           .from('contacts')
           .select()
-          .eq('user_id', userId);
+          .eq('tenant_id', tenantId);
 
       if (mounted) {
         setState(() {
@@ -1520,17 +1506,10 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
 
     try {
       final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) throw 'User not found';
+      final tenantId = TenantService().tenantId;
+      if (userId == null || tenantId == null)
+        throw 'User not logged in or no tenant selected';
 
-      // Get tenant_id from sms_gateway.users
-      final userProfile = await Supabase.instance.client
-          .schema('sms_gateway')
-          .from('users')
-          .select('tenant_id')
-          .eq('id', userId)
-          .single();
-
-      final tenantId = userProfile['tenant_id'] as String;
       final groupId = const Uuid().v4();
 
       final group = Group(

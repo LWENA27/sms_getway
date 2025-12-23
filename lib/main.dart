@@ -4,11 +4,12 @@ import 'package:provider/provider.dart';
 import 'core/constants.dart';
 import 'core/theme.dart';
 import 'core/theme_provider.dart';
-import 'auth/user_model.dart' as auth_models;
+import 'core/tenant_service.dart';
 import 'screens/contacts_screen.dart';
 import 'screens/bulk_sms_screen.dart';
 import 'screens/sms_logs_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/tenant_selector_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,6 +24,9 @@ void main() async {
   } catch (e) {
     debugPrint('❌ Supabase initialization error: $e');
   }
+
+  // Initialize TenantService
+  await TenantService().initialize();
 
   runApp(
     ChangeNotifierProvider(
@@ -53,19 +57,113 @@ class MyApp extends StatelessWidget {
   }
 }
 
-/// Wrapper to handle authentication state
-class AuthWrapper extends StatelessWidget {
+/// Wrapper to handle authentication and tenant selection state
+class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  bool _isCheckingTenant = true;
+  bool _needsTenantSelection = false;
+  List<TenantModel> _tenants = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAuthAndTenant();
+  }
+
+  Future<void> _checkAuthAndTenant() async {
+    final session = Supabase.instance.client.auth.currentSession;
+    final tenantService = TenantService();
+
+    if (session == null) {
+      // Not logged in
+      setState(() {
+        _isCheckingTenant = false;
+        _needsTenantSelection = false;
+      });
+      return;
+    }
+
+    // User is logged in, check if tenant is already selected
+    if (tenantService.hasTenant) {
+      // Tenant already selected, proceed to home
+      setState(() {
+        _isCheckingTenant = false;
+        _needsTenantSelection = false;
+      });
+      return;
+    }
+
+    // Load tenants for user
+    final hasAccess = await tenantService.loadTenantsForUser(session.user.id);
+
+    if (!hasAccess || tenantService.tenantsCount == 0) {
+      // No access - will show error on home page or redirect to login
+      setState(() {
+        _isCheckingTenant = false;
+        _needsTenantSelection = false;
+      });
+      return;
+    }
+
+    // Check if user needs to pick tenant (2+ tenants)
+    if (tenantService.shouldShowTenantPicker) {
+      setState(() {
+        _tenants = tenantService.tenants;
+        _needsTenantSelection = true;
+        _isCheckingTenant = false;
+      });
+    } else {
+      // Single tenant, already auto-selected
+      setState(() {
+        _isCheckingTenant = false;
+        _needsTenantSelection = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final session = Supabase.instance.client.auth.currentSession;
 
-    if (session != null) {
-      return const HomePage();
-    } else {
+    // Show loading while checking tenant
+    if (_isCheckingTenant) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(
+                'Loading workspace...',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Not logged in
+    if (session == null) {
       return const LoginPage();
     }
+
+    // Needs tenant selection (2+ tenants)
+    if (_needsTenantSelection && _tenants.isNotEmpty) {
+      return TenantSelectorScreen(
+        tenants: _tenants,
+      );
+    }
+
+    // Logged in with tenant selected
+    return const HomePage();
   }
 }
 
@@ -234,10 +332,39 @@ class _LoginPageState extends State<LoginPage> {
 
       if (response.user != null && mounted) {
         debugPrint('✅ Login successful: ${response.user!.email}');
+
+        // Load tenants for user
+        final tenantService = TenantService();
+        final hasAccess =
+            await tenantService.loadTenantsForUser(response.user!.id);
+
+        if (!hasAccess || tenantService.tenantsCount == 0) {
+          setState(() {
+            errorMessage =
+                'You do not have access to SMS Gateway. Contact your administrator.';
+            isLoading = false;
+          });
+          // Sign out since user has no access
+          await Supabase.instance.client.auth.signOut();
+          return;
+        }
+
         if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const HomePage()),
-          );
+          // Check if user needs to pick tenant (2+ tenants)
+          if (tenantService.shouldShowTenantPicker) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (_) => TenantSelectorScreen(
+                  tenants: tenantService.tenants,
+                ),
+              ),
+            );
+          } else {
+            // Single tenant, already auto-selected
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const HomePage()),
+            );
+          }
         }
       }
     } catch (e) {
@@ -314,7 +441,8 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  auth_models.AppUser? currentUser;
+  String? currentUserEmail;
+  String? currentTenantName;
   int contactCount = 0;
   int groupCount = 0;
   int smsLogCount = 0;
@@ -330,33 +458,33 @@ class _HomePageState extends State<HomePage> {
   void _loadData() async {
     try {
       final authUser = Supabase.instance.client.auth.currentUser;
-      if (authUser != null) {
+      final tenantService = TenantService();
+      final tenantId = tenantService.tenantId;
+
+      if (authUser != null && tenantId != null) {
         setState(() {
-          currentUser = auth_models.AppUser(
-            id: authUser.id,
-            email: authUser.email ?? '',
-            createdAt: DateTime.now(),
-          );
+          currentUserEmail = authUser.email;
+          currentTenantName = tenantService.tenantName;
         });
 
-        // Load counts
+        // Load counts - filter by tenant_id (data belongs to tenant, not user)
         final contacts = await Supabase.instance.client
             .schema('sms_gateway')
             .from('contacts')
             .select('id')
-            .eq('user_id', authUser.id);
+            .eq('tenant_id', tenantId);
 
         final groups = await Supabase.instance.client
             .schema('sms_gateway')
             .from('groups')
             .select('id')
-            .eq('user_id', authUser.id);
+            .eq('tenant_id', tenantId);
 
         final logs = await Supabase.instance.client
             .schema('sms_gateway')
             .from('sms_logs')
             .select('id')
-            .eq('user_id', authUser.id);
+            .eq('tenant_id', tenantId);
 
         if (mounted) {
           setState(() {
@@ -460,7 +588,18 @@ class _HomePageState extends State<HomePage> {
                             height: AppTheme.paddingSmall,
                           ),
                           Text(
-                            currentUser?.email ?? 'User',
+                            currentTenantName ?? 'Workspace',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.primaryColor,
+                                ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            currentUserEmail ?? 'User',
                             style: Theme.of(context)
                                 .textTheme
                                 .bodyMedium
@@ -516,7 +655,7 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ],
                   ),
-                  ],
+                ],
               ),
             ),
           );

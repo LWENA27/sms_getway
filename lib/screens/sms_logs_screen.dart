@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/theme.dart';
+import '../core/tenant_service.dart';
 import '../sms/sms_log_model.dart';
 
 class SmsLogsScreen extends StatefulWidget {
@@ -23,19 +24,21 @@ class _SmsLogsScreenState extends State<SmsLogsScreen> {
 
   void _loadLogs() async {
     try {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) return;
+      final tenantId = TenantService().tenantId;
+      if (tenantId == null) return;
 
       final response = filterStatus == 'all'
           ? await Supabase.instance.client
-              .schema('sms_gateway').from('sms_logs')
+              .schema('sms_gateway')
+              .from('sms_logs')
               .select()
-              .eq('user_id', userId)
+              .eq('tenant_id', tenantId)
               .order('created_at', ascending: false)
           : await Supabase.instance.client
-              .schema('sms_gateway').from('sms_logs')
+              .schema('sms_gateway')
+              .from('sms_logs')
               .select()
-              .eq('user_id', userId)
+              .eq('tenant_id', tenantId)
               .eq('status', filterStatus)
               .order('created_at', ascending: false);
 

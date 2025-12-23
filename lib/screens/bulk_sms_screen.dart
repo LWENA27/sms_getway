@@ -4,6 +4,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme.dart';
+import '../core/tenant_service.dart';
 import '../api/native_sms_service.dart';
 import '../sms/sms_log_model.dart';
 import '../contacts/contact_model.dart';
@@ -36,20 +37,20 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
 
   void _loadData() async {
     try {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) return;
+      final tenantId = TenantService().tenantId;
+      if (tenantId == null) return;
 
       final contacts = await Supabase.instance.client
           .schema('sms_gateway')
           .from('contacts')
           .select()
-          .eq('user_id', userId);
+          .eq('tenant_id', tenantId);
 
       final groups = await Supabase.instance.client
           .schema('sms_gateway')
           .from('groups')
           .select()
-          .eq('user_id', userId);
+          .eq('tenant_id', tenantId);
 
       if (mounted) {
         setState(() {
@@ -139,17 +140,9 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
 
     try {
       final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) throw 'User not found';
-
-      // Get tenant_id from sms_gateway.users
-      final userProfile = await Supabase.instance.client
-          .schema('sms_gateway')
-          .from('users')
-          .select('tenant_id')
-          .eq('id', userId)
-          .single();
-
-      final tenantId = userProfile['tenant_id'] as String;
+      final tenantId = TenantService().tenantId;
+      if (userId == null || tenantId == null)
+        throw 'User not logged in or no tenant selected';
 
       int successCount = 0;
       int failureCount = 0;

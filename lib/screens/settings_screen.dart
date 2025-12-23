@@ -4,7 +4,10 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme.dart';
 import '../core/theme_provider.dart';
+import '../core/tenant_service.dart';
+import '../main.dart';
 import 'profile_screen.dart';
+import 'tenant_selector_screen.dart';
 
 // SMS Channel options
 enum SmsChannel { thisPhone, quickSMS }
@@ -20,6 +23,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? userEmail;
   String? userId;
   SmsChannel selectedChannel = SmsChannel.thisPhone;
+  final TenantService _tenantService = TenantService();
 
   @override
   void initState() {
@@ -122,11 +126,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  void _switchWorkspace() {
+    if (_tenantService.tenantsCount < 2) return;
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => TenantSelectorScreen(
+          tenants: _tenantService.tenants,
+        ),
+      ),
+      (route) => false,
+    );
+  }
+
   void _logout() async {
     try {
+      // Clear tenant data first
+      await _tenantService.clear();
+      // Then sign out
       await Supabase.instance.client.auth.signOut();
       if (mounted) {
-        Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+        // Navigate to AuthWrapper which handles login screen
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const AuthWrapper()),
+          (route) => false,
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -159,6 +183,73 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         children: [
           const SizedBox(height: AppTheme.paddingMedium),
+
+          // Current Workspace Section
+          if (_tenantService.hasTenant) ...[
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Center(
+                      child: Text(
+                        _tenantService.tenantName?.isNotEmpty == true
+                            ? _tenantService.tenantName![0].toUpperCase()
+                            : 'O',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.primaryColor,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Current Workspace',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _tenantService.tenantName ?? 'Unknown',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_tenantService.tenantsCount >= 2)
+                    TextButton(
+                      onPressed: _switchWorkspace,
+                      child: const Text('Switch'),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+          ],
+
           // Settings Options
           ListTile(
             leading: const Icon(Icons.notifications),
