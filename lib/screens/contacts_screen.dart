@@ -23,12 +23,20 @@ class _ContactsScreenState extends State<ContactsScreen> {
   void _loadContacts() async {
     try {
       final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) return;
+      if (userId == null) {
+        debugPrint('❌ No user logged in');
+        return;
+      }
+
+      debugPrint('📱 Loading contacts for user: $userId');
 
       final response = await Supabase.instance.client
-          .from('sms_gateway.contacts')
+          .schema('sms_gateway')
+          .from('contacts')
           .select()
           .eq('user_id', userId);
+
+      debugPrint('✅ Loaded ${(response as List).length} contacts');
 
       if (mounted) {
         setState(() {
@@ -38,6 +46,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
         });
       }
     } catch (e) {
+      debugPrint('❌ Error loading data: $e');
       if (mounted) {
         setState(() => isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -61,7 +70,11 @@ class _ContactsScreenState extends State<ContactsScreen> {
 
   void _deleteContact(String id) async {
     try {
-      await Supabase.instance.client.from('contacts').delete().eq('id', id);
+      await Supabase.instance.client
+          .schema('sms_gateway')
+          .from('contacts')
+          .delete()
+          .eq('id', id);
       _loadContacts();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Contact deleted')),
@@ -168,7 +181,8 @@ class _AddContactDialogState extends State<AddContactDialog> {
       );
 
       await Supabase.instance.client
-          .from('sms_gateway.contacts')
+          .schema('sms_gateway')
+          .from('contacts')
           .insert(contact.toJson());
 
       if (mounted) {

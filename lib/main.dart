@@ -34,7 +34,7 @@ class MyApp extends StatelessWidget {
       title: AppConstants.appName,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.system,
+      themeMode: ThemeMode.light, // Professional light theme default
       debugShowCheckedModeBanner: false,
       home: const AuthWrapper(),
     );
@@ -84,14 +84,32 @@ class _LoginPageState extends State<LoginPage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             SizedBox(height: MediaQuery.of(context).size.height * 0.1),
+            // Logo or Icon
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.sms,
+                size: 50,
+                color: AppTheme.primaryColor,
+              ),
+            ),
+            const SizedBox(height: AppTheme.paddingLarge),
             Text(
-              '📱 SMS Gateway',
-              style: Theme.of(context).textTheme.displayMedium,
+              'SMS Gateway',
+              style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.primaryColor,
+                  ),
               textAlign: TextAlign.center,
             ),
-            SizedBox(height: MediaQuery.of(context).size.height * 0.05),
+            const SizedBox(height: AppTheme.paddingSmall),
             Text(
-              'Bulk SMS Management',
+              'Professional Bulk SMS Management',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: Colors.grey[600],
                   ),
@@ -311,17 +329,20 @@ class _HomePageState extends State<HomePage> {
 
         // Load counts
         final contacts = await Supabase.instance.client
-            .from('sms_gateway.contacts')
+            .schema('sms_gateway')
+            .from('contacts')
             .select('id')
             .eq('user_id', authUser.id);
 
         final groups = await Supabase.instance.client
-            .from('sms_gateway.groups')
+            .schema('sms_gateway')
+            .from('groups')
             .select('id')
             .eq('user_id', authUser.id);
 
         final logs = await Supabase.instance.client
-            .from('sms_gateway.sms_logs')
+            .schema('sms_gateway')
+            .from('sms_logs')
             .select('id')
             .eq('user_id', authUser.id);
 

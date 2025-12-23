@@ -8,9 +8,11 @@ class AppConstants {
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6amdkZXFmbXhrbXBtYWR0YnBiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkyOTk3NjQsImV4cCI6MjA2NDg3NTc2NH0.NTEzbvVCQ_vNTJPS5bFPSOm5XNRjUrFpSUPEWQDm434';
 
   // ===== APP CONFIGURATION =====
-  static const String appName = 'SMS Gateway';
+  static const String appName = 'SMS Gateway Pro';
   static const String appVersion = '1.0.0';
   static const String appCompanyName = 'LWENATECH';
+  static const String appDescription =
+      'Professional Bulk SMS Management System';
 
   // ===== RATE LIMITING =====
   static const int maxSmsPerMinute = 30;

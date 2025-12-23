@@ -27,7 +27,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
       if (userId == null) return;
 
       final response = await Supabase.instance.client
-          .from('sms_gateway.groups')
+          .schema('sms_gateway')
+          .from('groups')
           .select()
           .eq('user_id', userId);
 
@@ -62,7 +63,11 @@ class _GroupsScreenState extends State<GroupsScreen> {
 
   void _deleteGroup(String id) async {
     try {
-      await Supabase.instance.client.from('groups').delete().eq('id', id);
+      await Supabase.instance.client
+          .schema('sms_gateway')
+          .from('groups')
+          .delete()
+          .eq('id', id);
       _loadGroups();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Group deleted')),
@@ -170,7 +175,8 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
       if (userId == null) return;
 
       final response = await Supabase.instance.client
-          .from('sms_gateway.contacts')
+          .schema('sms_gateway')
+          .from('contacts')
           .select()
           .eq('user_id', userId);
 
@@ -221,7 +227,8 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
       );
 
       await Supabase.instance.client
-          .from('sms_gateway.groups')
+          .schema('sms_gateway')
+          .from('groups')
           .insert(group.toJson());
 
       // Add members
@@ -233,7 +240,8 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
           addedAt: DateTime.now(),
         );
         await Supabase.instance.client
-            .from('sms_gateway.group_members')
+            .schema('sms_gateway')
+            .from('group_members')
             .insert(member.toJson());
       }
 
@@ -368,7 +376,8 @@ class _GroupMembersDialogState extends State<GroupMembersDialog> {
   void _loadMembers() async {
     try {
       final memberIds = await Supabase.instance.client
-          .from('sms_gateway.group_members')
+          .schema('sms_gateway')
+          .from('group_members')
           .select('contact_id')
           .eq('group_id', widget.group.id);
 
@@ -376,7 +385,8 @@ class _GroupMembersDialogState extends State<GroupMembersDialog> {
           (memberIds as List).map((m) => m['contact_id'] as String).toList();
 
       final contacts = await Supabase.instance.client
-          .from('sms_gateway.contacts')
+          .schema('sms_gateway')
+          .from('contacts')
           .select()
           .inFilter('id', contactIds);
 

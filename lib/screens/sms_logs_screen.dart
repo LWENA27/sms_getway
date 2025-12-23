@@ -28,12 +28,12 @@ class _SmsLogsScreenState extends State<SmsLogsScreen> {
 
       final response = filterStatus == 'all'
           ? await Supabase.instance.client
-              .from('sms_gateway.sms_logs')
+              .schema('sms_gateway').from('sms_logs')
               .select()
               .eq('user_id', userId)
               .order('created_at', ascending: false)
           : await Supabase.instance.client
-              .from('sms_gateway.sms_logs')
+              .schema('sms_gateway').from('sms_logs')
               .select()
               .eq('user_id', userId)
               .eq('status', filterStatus)

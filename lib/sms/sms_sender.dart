@@ -1,5 +1,8 @@
 /// SMS Sender Service - Android SMS functionality
 library;
+
+import 'package:flutter/services.dart';
+
 // Note: This is a template. Implement with actual flutter_sms or sms plugins
 
 class SmsSenderService {
