@@ -110,7 +110,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 trailing: Switch(
                   value: themeProvider.isDarkMode,
                   onChanged: (value) {
-                    themeProvider.toggleTheme();
+                    // Prevent rapid toggles
+                    Future.delayed(const Duration(milliseconds: 100), () {
+                      themeProvider.toggleTheme();
+                    });
                   },
                 ),
               );
