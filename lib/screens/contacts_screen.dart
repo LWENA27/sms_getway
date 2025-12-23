@@ -21,6 +21,10 @@ class _ContactsScreenState extends State<ContactsScreen>
   List<Contact> contacts = [];
   List<Group> groups = [];
   bool isLoading = true;
+  
+  // Selection mode for bulk operations
+  bool isSelectionMode = false;
+  Set<String> selectedContactIds = {};
 
   @override
   void initState() {
@@ -28,6 +32,13 @@ class _ContactsScreenState extends State<ContactsScreen>
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(() {
       if (_tabController.indexIsChanging) {
+        // Exit selection mode when switching tabs
+        if (isSelectionMode) {
+          setState(() {
+            isSelectionMode = false;
+            selectedContactIds.clear();
+          });
+        }
         setState(() {});
       }
     });
@@ -136,6 +147,146 @@ class _ContactsScreenState extends State<ContactsScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e')),
       );
+    }
+  }
+
+  /// Toggle selection mode
+  void _toggleSelectionMode() {
+    setState(() {
+      isSelectionMode = !isSelectionMode;
+      if (!isSelectionMode) {
+        selectedContactIds.clear();
+      }
+    });
+  }
+
+  /// Toggle contact selection
+  void _toggleContactSelection(String id) {
+    setState(() {
+      if (selectedContactIds.contains(id)) {
+        selectedContactIds.remove(id);
+        // Exit selection mode if no contacts selected
+        if (selectedContactIds.isEmpty) {
+          isSelectionMode = false;
+        }
+      } else {
+        selectedContactIds.add(id);
+      }
+    });
+  }
+
+  /// Select all contacts
+  void _selectAllContacts() {
+    setState(() {
+      if (selectedContactIds.length == contacts.length) {
+        // Deselect all
+        selectedContactIds.clear();
+      } else {
+        // Select all
+        selectedContactIds = contacts.map((c) => c.id).toSet();
+      }
+    });
+  }
+
+  /// Delete selected contacts
+  void _deleteSelectedContacts() async {
+    if (selectedContactIds.isEmpty) return;
+
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Contacts'),
+        content: Text(
+          'Are you sure you want to delete ${selectedContactIds.length} contact${selectedContactIds.length > 1 ? 's' : ''}?\n\nThis action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    // Show progress dialog
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        content: Row(
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(width: 20),
+            Text('Deleting ${selectedContactIds.length} contacts...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      int deleted = 0;
+      int errors = 0;
+
+      for (final id in selectedContactIds) {
+        try {
+          await Supabase.instance.client
+              .schema('sms_gateway')
+              .from('contacts')
+              .delete()
+              .eq('id', id);
+          deleted++;
+        } catch (e) {
+          errors++;
+          debugPrint('Error deleting contact $id: $e');
+        }
+      }
+
+      // Close progress dialog
+      if (mounted) Navigator.pop(context);
+
+      // Exit selection mode
+      setState(() {
+        isSelectionMode = false;
+        selectedContactIds.clear();
+      });
+
+      // Reload contacts
+      _loadContacts();
+
+      // Show result
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              errors == 0
+                  ? '$deleted contact${deleted > 1 ? 's' : ''} deleted'
+                  : '$deleted deleted, $errors failed',
+            ),
+            backgroundColor: errors == 0 ? Colors.green : Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
     }
   }
 
@@ -925,17 +1076,7 @@ class _ContactsScreenState extends State<ContactsScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Contacts & Groups'),
-        elevation: 0,
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(icon: Icon(Icons.contacts), text: 'Contacts'),
-            Tab(icon: Icon(Icons.group), text: 'Groups'),
-          ],
-        ),
-      ),
+      appBar: isSelectionMode ? _buildSelectionAppBar() : _buildNormalAppBar(),
       body: TabBarView(
         controller: _tabController,
         children: [
@@ -943,16 +1084,70 @@ class _ContactsScreenState extends State<ContactsScreen>
           _buildGroupsTab(),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          if (_tabController.index == 0) {
-            _showAddOptions(); // Show options: Add Contact or Import CSV
-          } else {
-            _createGroup();
-          }
-        },
-        child: const Icon(Icons.add),
+      floatingActionButton: isSelectionMode
+          ? null // Hide FAB in selection mode
+          : FloatingActionButton(
+              onPressed: () {
+                if (_tabController.index == 0) {
+                  _showAddOptions(); // Show options: Add Contact or Import CSV
+                } else {
+                  _createGroup();
+                }
+              },
+              child: const Icon(Icons.add),
+            ),
+    );
+  }
+
+  /// Normal AppBar with tabs
+  PreferredSizeWidget _buildNormalAppBar() {
+    return AppBar(
+      title: const Text('Contacts & Groups'),
+      elevation: 0,
+      bottom: TabBar(
+        controller: _tabController,
+        tabs: const [
+          Tab(icon: Icon(Icons.contacts), text: 'Contacts'),
+          Tab(icon: Icon(Icons.group), text: 'Groups'),
+        ],
       ),
+    );
+  }
+
+  /// Selection mode AppBar with actions
+  PreferredSizeWidget _buildSelectionAppBar() {
+    return AppBar(
+      leading: IconButton(
+        icon: const Icon(Icons.close),
+        onPressed: () {
+          setState(() {
+            isSelectionMode = false;
+            selectedContactIds.clear();
+          });
+        },
+      ),
+      title: Text('${selectedContactIds.length} selected'),
+      elevation: 0,
+      actions: [
+        // Select all button
+        IconButton(
+          icon: Icon(
+            selectedContactIds.length == contacts.length
+                ? Icons.deselect
+                : Icons.select_all,
+          ),
+          tooltip: selectedContactIds.length == contacts.length
+              ? 'Deselect all'
+              : 'Select all',
+          onPressed: _selectAllContacts,
+        ),
+        // Delete button
+        IconButton(
+          icon: const Icon(Icons.delete),
+          tooltip: 'Delete selected',
+          onPressed: selectedContactIds.isEmpty ? null : _deleteSelectedContacts,
+        ),
+      ],
     );
   }
 
@@ -984,21 +1179,45 @@ class _ContactsScreenState extends State<ContactsScreen>
       itemCount: contacts.length,
       itemBuilder: (context, index) {
         final contact = contacts[index];
+        final isSelected = selectedContactIds.contains(contact.id);
+        
         return Card(
           margin: const EdgeInsets.symmetric(
             horizontal: AppTheme.paddingMedium,
             vertical: AppTheme.paddingSmall,
           ),
+          color: isSelected 
+              ? Theme.of(context).colorScheme.primaryContainer 
+              : null,
           child: ListTile(
-            leading: CircleAvatar(
-              child: Text(contact.name[0].toUpperCase()),
-            ),
+            leading: isSelectionMode
+                ? Checkbox(
+                    value: isSelected,
+                    onChanged: (_) => _toggleContactSelection(contact.id),
+                  )
+                : CircleAvatar(
+                    child: Text(contact.name[0].toUpperCase()),
+                  ),
             title: Text(contact.name),
             subtitle: Text(contact.phoneNumber),
-            trailing: IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: () => _deleteContact(contact.id),
-            ),
+            trailing: isSelectionMode
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    onPressed: () => _deleteContact(contact.id),
+                  ),
+            onTap: isSelectionMode
+                ? () => _toggleContactSelection(contact.id)
+                : null,
+            onLongPress: isSelectionMode
+                ? null
+                : () {
+                    // Enter selection mode on long press
+                    setState(() {
+                      isSelectionMode = true;
+                      selectedContactIds.add(contact.id);
+                    });
+                  },
           ),
         );
       },
