@@ -30,13 +30,19 @@ class _GroupsScreenState extends State<GroupsScreen> {
       final response = await Supabase.instance.client
           .schema('sms_gateway')
           .from('groups')
-          .select()
+          .select('*, group_members(id)')
           .eq('user_id', userId);
 
       if (mounted) {
         setState(() {
-          groups =
-              (response as List).map((json) => Group.fromJson(json)).toList();
+          groups = (response as List).map((json) {
+            final group = Group.fromJson(json);
+            // Count the actual members from the joined data
+            final memberCount = json['group_members'] != null
+                ? (json['group_members'] as List).length
+                : 0;
+            return group.copyWith(memberCount: memberCount);
+          }).toList();
           isLoading = false;
         });
       }

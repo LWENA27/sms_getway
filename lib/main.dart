@@ -4,9 +4,9 @@ import 'core/constants.dart';
 import 'core/theme.dart';
 import 'auth/user_model.dart' as auth_models;
 import 'screens/contacts_screen.dart';
-import 'screens/groups_screen.dart';
 import 'screens/bulk_sms_screen.dart';
 import 'screens/sms_logs_screen.dart';
+import 'screens/settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -370,21 +370,15 @@ class _HomePageState extends State<HomePage> {
     final screens = [
       _buildDashboard(),
       const ContactsScreen(),
-      const GroupsScreen(),
       const BulkSmsScreen(),
       const SmsLogsScreen(),
+      const SettingsScreen(),
     ];
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('SMS Gateway'),
         elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _logout,
-          ),
-        ],
       ),
       body: screens[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
@@ -400,16 +394,16 @@ class _HomePageState extends State<HomePage> {
             label: 'Contacts',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.group),
-            label: 'Groups',
-          ),
-          BottomNavigationBarItem(
             icon: Icon(Icons.send),
             label: 'Send',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.history),
             label: 'Logs',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: 'Settings',
           ),
         ],
         onTap: (index) {
@@ -654,34 +648,6 @@ class _HomePageState extends State<HomePage> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  void _logout() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Supabase.instance.client.auth.signOut();
-              Navigator.pop(context);
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(
-                  builder: (_) => const LoginPage(),
-                ),
-              );
-            },
-            child: const Text('Logout'),
-          ),
-        ],
       ),
     );
   }
