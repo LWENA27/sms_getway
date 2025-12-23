@@ -7,9 +7,11 @@ import '../core/theme_provider.dart';
 import '../core/tenant_service.dart';
 import '../services/local_data_service.dart';
 import '../services/sync_service.dart';
+import '../services/api_sms_queue_service.dart';
 import '../main.dart';
 import 'profile_screen.dart';
 import 'tenant_selector_screen.dart';
+import 'api_settings_screen.dart';
 
 // SMS Channel options
 enum SmsChannel { thisPhone, quickSMS }
@@ -310,6 +312,57 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: _showChannelDialog,
+          ),
+
+          // API Settings
+          ListenableBuilder(
+            listenable: ApiSmsQueueService(),
+            builder: (context, _) {
+              final apiService = ApiSmsQueueService();
+              return ListTile(
+                leading: const Icon(Icons.api),
+                title: const Text('API Integration'),
+                subtitle: Text(
+                  apiService.isEnabled
+                      ? 'Active - ${apiService.pendingCount} pending'
+                      : 'Manage API keys & queue',
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (apiService.pendingCount > 0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.orange,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${apiService.pendingCount}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.chevron_right),
+                  ],
+                ),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ApiSettingsScreen(),
+                    ),
+                  );
+                },
+              );
+            },
           ),
           const Divider(),
 
