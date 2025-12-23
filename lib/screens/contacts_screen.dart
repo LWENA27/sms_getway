@@ -359,6 +359,225 @@ class _ContactsScreenState extends State<ContactsScreen>
     }
   }
 
+  /// Import contacts from a VCF (vCard) file
+  void _importVcfContacts() async {
+    try {
+      // Pick VCF file
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['vcf', 'vcard'],
+        allowMultiple: false,
+      );
+
+      if (result == null || result.files.isEmpty) {
+        return; // User cancelled
+      }
+
+      final file = result.files.first;
+      if (file.path == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not read file')),
+          );
+        }
+        return;
+      }
+
+      // Show loading dialog
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 20),
+              Text('Importing contacts from VCF...'),
+            ],
+          ),
+        ),
+      );
+
+      // Read and parse VCF
+      final fileContent = await File(file.path!).readAsString();
+      final vcards = _parseVcf(fileContent);
+
+      if (vcards.isEmpty) {
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('VCF file is empty or invalid')),
+          );
+        }
+        return;
+      }
+
+      // Get user info
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId == null) {
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('User not logged in')),
+          );
+        }
+        return;
+      }
+
+      // Get tenant_id
+      final userProfile = await Supabase.instance.client
+          .schema('sms_gateway')
+          .from('users')
+          .select('tenant_id')
+          .eq('id', userId)
+          .single();
+      final tenantId = userProfile['tenant_id'] as String;
+
+      // Process contacts
+      int imported = 0;
+      int skipped = 0;
+      int errors = 0;
+      List<String> errorMessages = [];
+
+      for (int i = 0; i < vcards.length; i++) {
+        final vcard = vcards[i];
+        final name = vcard['name'] ?? '';
+        var phone = vcard['phone'] ?? '';
+
+        // Clean phone number
+        phone = phone.replaceAll(RegExp(r'[^\d+]'), '');
+
+        // Validate
+        if (name.isEmpty || phone.isEmpty) {
+          skipped++;
+          errorMessages.add('Contact ${i + 1}: Missing name or phone');
+          continue;
+        }
+
+        // Validate phone number (at least 8 digits)
+        if (phone.replaceAll('+', '').length < 8) {
+          skipped++;
+          errorMessages.add('Contact ${i + 1}: Invalid phone "$phone"');
+          continue;
+        }
+
+        try {
+          // Insert contact
+          await Supabase.instance.client
+              .schema('sms_gateway')
+              .from('contacts')
+              .insert({
+            'id': const Uuid().v4(),
+            'user_id': userId,
+            'tenant_id': tenantId,
+            'name': name,
+            'phone_number': phone,
+          });
+          imported++;
+        } catch (e) {
+          // Check for duplicate
+          if (e.toString().contains('duplicate') ||
+              e.toString().contains('unique')) {
+            skipped++;
+            errorMessages.add('Contact ${i + 1}: Duplicate "$name"');
+          } else {
+            errors++;
+            errorMessages.add('Contact ${i + 1}: $e');
+          }
+        }
+      }
+
+      // Close loading dialog
+      if (mounted) Navigator.pop(context);
+
+      // Reload contacts
+      _loadContacts();
+
+      // Show result dialog
+      if (mounted) {
+        _showImportResultDialog(imported, skipped, errors, errorMessages);
+      }
+    } catch (e) {
+      // Close loading dialog if open
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('VCF import error: $e')),
+        );
+      }
+    }
+  }
+
+  /// Parse VCF (vCard) content into a list of contacts
+  List<Map<String, String>> _parseVcf(String content) {
+    final List<Map<String, String>> contacts = [];
+    final lines = content.split('\n');
+
+    String? currentName;
+    String? currentPhone;
+    bool inVcard = false;
+
+    for (var line in lines) {
+      line = line.trim();
+
+      if (line.startsWith('BEGIN:VCARD')) {
+        inVcard = true;
+        currentName = null;
+        currentPhone = null;
+      } else if (line.startsWith('END:VCARD')) {
+        if (inVcard && (currentName != null || currentPhone != null)) {
+          contacts.add({
+            'name': currentName ?? 'Unknown',
+            'phone': currentPhone ?? '',
+          });
+        }
+        inVcard = false;
+      } else if (inVcard) {
+        // Parse FN (Full Name) - preferred
+        if (line.startsWith('FN:') || line.startsWith('FN;')) {
+          currentName = _extractVcfValue(line);
+        }
+        // Parse N (Name) as fallback - format: Last;First;Middle;Prefix;Suffix
+        else if (line.startsWith('N:') || line.startsWith('N;')) {
+          if (currentName == null || currentName.isEmpty) {
+            final nameParts = _extractVcfValue(line).split(';');
+            if (nameParts.length >= 2) {
+              final firstName = nameParts[1].trim();
+              final lastName = nameParts[0].trim();
+              currentName = '$firstName $lastName'.trim();
+            } else if (nameParts.isNotEmpty) {
+              currentName = nameParts[0].trim();
+            }
+          }
+        }
+        // Parse TEL (Phone) - prefer CELL or first available
+        else if (line.startsWith('TEL')) {
+          // Extract phone number
+          final phone = _extractVcfValue(line);
+          // Prefer cell phone, but take first if no cell
+          if (line.toUpperCase().contains('CELL') ||
+              line.toUpperCase().contains('MOBILE') ||
+              currentPhone == null) {
+            currentPhone = phone;
+          }
+        }
+      }
+    }
+
+    return contacts;
+  }
+
+  /// Extract value from VCF line (handles various formats)
+  String _extractVcfValue(String line) {
+    // Handle lines like "TEL;TYPE=CELL:+1234567890" or "FN:John Doe"
+    final colonIndex = line.indexOf(':');
+    if (colonIndex == -1) return line;
+    return line.substring(colonIndex + 1).trim();
+  }
+
   void _showImportResultDialog(
       int imported, int skipped, int errors, List<String> errorMessages) {
     showDialog(
@@ -465,6 +684,15 @@ class _ContactsScreenState extends State<ContactsScreen>
               onTap: () {
                 Navigator.pop(context);
                 _importCsvContacts();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.contact_phone),
+              title: const Text('Import from VCF'),
+              subtitle: const Text('Import contacts from vCard file'),
+              onTap: () {
+                Navigator.pop(context);
+                _importVcfContacts();
               },
             ),
           ],

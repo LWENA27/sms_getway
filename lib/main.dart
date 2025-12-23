@@ -37,14 +37,16 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final themeMode = context
-        .select<ThemeProvider, ThemeMode>((provider) => provider.themeMode);
+    final themeProvider = context.watch<ThemeProvider>();
 
     return MaterialApp(
+      // Use a key to force complete rebuild when theme changes
+      // This prevents animation interpolation errors during theme transitions
+      key: ValueKey('app_${themeProvider.isDarkMode}'),
       title: AppConstants.appName,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: themeMode,
+      themeMode: themeProvider.themeMode,
       debugShowCheckedModeBanner: false,
       home: const AuthWrapper(),
     );
