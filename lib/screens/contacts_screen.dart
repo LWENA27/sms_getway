@@ -1,11 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:uuid/uuid.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 import '../core/theme.dart';
-import '../core/tenant_service.dart';
+import '../services/local_data_service.dart';
 import '../contacts/contact_model.dart';
 import '../groups/group_model.dart';
 
@@ -55,26 +53,16 @@ class _ContactsScreenState extends State<ContactsScreen>
 
   void _loadContacts() async {
     try {
-      final tenantId = TenantService().tenantId;
-      if (tenantId == null) {
-        debugPrint('❌ No tenant selected');
-        return;
-      }
+      debugPrint('📱 Loading contacts from local database');
 
-      debugPrint('📱 Loading contacts for tenant: $tenantId');
+      // Load from local database (offline-first)
+      final localContacts = await LocalDataService().getContacts();
 
-      final response = await Supabase.instance.client
-          .schema('sms_gateway')
-          .from('contacts')
-          .select()
-          .eq('tenant_id', tenantId);
-
-      debugPrint('✅ Loaded ${(response as List).length} contacts');
+      debugPrint('✅ Loaded ${localContacts.length} contacts');
 
       if (mounted) {
         setState(() {
-          contacts =
-              (response as List).map((json) => Contact.fromJson(json)).toList();
+          contacts = localContacts;
           isLoading = false;
         });
       }
@@ -91,25 +79,12 @@ class _ContactsScreenState extends State<ContactsScreen>
 
   void _loadGroups() async {
     try {
-      final tenantId = TenantService().tenantId;
-      if (tenantId == null) return;
-
-      final response = await Supabase.instance.client
-          .schema('sms_gateway')
-          .from('groups')
-          .select('*, group_members(id)')
-          .eq('tenant_id', tenantId);
+      // Load from local database (offline-first)
+      final localGroups = await LocalDataService().getGroups();
 
       if (mounted) {
         setState(() {
-          groups = (response as List).map((json) {
-            final group = Group.fromJson(json);
-            // Count the actual members from the joined data
-            final memberCount = json['group_members'] != null
-                ? (json['group_members'] as List).length
-                : 0;
-            return group.copyWith(memberCount: memberCount);
-          }).toList();
+          groups = localGroups;
         });
       }
     } catch (e) {
@@ -135,11 +110,8 @@ class _ContactsScreenState extends State<ContactsScreen>
 
   void _deleteContact(String id) async {
     try {
-      await Supabase.instance.client
-          .schema('sms_gateway')
-          .from('contacts')
-          .delete()
-          .eq('id', id);
+      // Delete using local data service (offline-first)
+      await LocalDataService().deleteContact(id);
       _loadContacts();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -246,11 +218,7 @@ class _ContactsScreenState extends State<ContactsScreen>
 
       for (final id in selectedContactIds) {
         try {
-          await Supabase.instance.client
-              .schema('sms_gateway')
-              .from('contacts')
-              .delete()
-              .eq('id', id);
+          await LocalDataService().deleteContact(id);
           deleted++;
         } catch (e) {
           errors++;
@@ -309,11 +277,7 @@ class _ContactsScreenState extends State<ContactsScreen>
 
   void _deleteGroup(String id) async {
     try {
-      await Supabase.instance.client
-          .schema('sms_gateway')
-          .from('groups')
-          .delete()
-          .eq('id', id);
+      await LocalDataService().deleteGroup(id);
       _loadGroups();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Group deleted')),
@@ -811,20 +775,6 @@ class _ContactsScreenState extends State<ContactsScreen>
     );
 
     try {
-      // Get user info
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      final tenantId = TenantService().tenantId;
-      if (userId == null || tenantId == null) {
-        if (mounted) {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text('User not logged in or no tenant selected')),
-          );
-        }
-        return;
-      }
-
       int imported = 0;
       int skipped = 0;
       int errors = 0;
@@ -836,20 +786,15 @@ class _ContactsScreenState extends State<ContactsScreen>
         final phone = contact['phone']!;
 
         try {
-          await Supabase.instance.client
-              .schema('sms_gateway')
-              .from('contacts')
-              .insert({
-            'id': const Uuid().v4(),
-            'user_id': userId,
-            'tenant_id': tenantId,
-            'name': name,
-            'phone_number': phone,
-          });
+          await LocalDataService().addContact(
+            name: name,
+            phoneNumber: phone,
+          );
           imported++;
         } catch (e) {
           if (e.toString().contains('duplicate') ||
-              e.toString().contains('unique')) {
+              e.toString().contains('unique') ||
+              e.toString().contains('UNIQUE')) {
             skipped++;
             errorMessages.add('${i + 1}. "$name": Duplicate');
           } else {
@@ -1345,24 +1290,10 @@ class _AddContactDialogState extends State<AddContactDialog> {
     setState(() => isLoading = true);
 
     try {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      final tenantId = TenantService().tenantId;
-      if (userId == null || tenantId == null)
-        throw 'User not logged in or no tenant selected';
-
-      final contact = Contact(
-        id: const Uuid().v4(),
-        userId: userId,
-        tenantId: tenantId,
+      final contact = await LocalDataService().addContact(
         name: nameController.text,
-        phoneNumber: phone, // Use formatted phone
-        createdAt: DateTime.now(),
+        phoneNumber: phone,
       );
-
-      await Supabase.instance.client
-          .schema('sms_gateway')
-          .from('contacts')
-          .insert(contact.toJson());
 
       if (mounted) {
         widget.onAdd(contact);
@@ -1463,19 +1394,11 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
 
   void _loadAvailableContacts() async {
     try {
-      final tenantId = TenantService().tenantId;
-      if (tenantId == null) return;
-
-      final response = await Supabase.instance.client
-          .schema('sms_gateway')
-          .from('contacts')
-          .select()
-          .eq('tenant_id', tenantId);
+      final contacts = await LocalDataService().getContacts();
 
       if (mounted) {
         setState(() {
-          availableContacts =
-              (response as List).map((json) => Contact.fromJson(json)).toList();
+          availableContacts = contacts;
         });
       }
     } catch (e) {
@@ -1505,41 +1428,10 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
     setState(() => isLoading = true);
 
     try {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      final tenantId = TenantService().tenantId;
-      if (userId == null || tenantId == null)
-        throw 'User not logged in or no tenant selected';
-
-      final groupId = const Uuid().v4();
-
-      final group = Group(
-        id: groupId,
-        userId: userId,
-        tenantId: tenantId,
+      final group = await LocalDataService().createGroup(
         name: nameController.text,
-        createdAt: DateTime.now(),
-        memberCount: selectedContacts.length,
+        contactIds: selectedContacts.map((c) => c.id).toList(),
       );
-
-      await Supabase.instance.client
-          .schema('sms_gateway')
-          .from('groups')
-          .insert(group.toJson());
-
-      // Add members
-      for (final contact in selectedContacts) {
-        final member = GroupMember(
-          id: const Uuid().v4(),
-          groupId: groupId,
-          contactId: contact.id,
-          tenantId: tenantId,
-          addedAt: DateTime.now(),
-        );
-        await Supabase.instance.client
-            .schema('sms_gateway')
-            .from('group_members')
-            .insert(member.toJson());
-      }
 
       if (mounted) {
         widget.onCreate(group);
@@ -1672,35 +1564,12 @@ class _GroupMembersDialogState extends State<GroupMembersDialog> {
 
   void _loadMembers() async {
     try {
-      final memberIds = await Supabase.instance.client
-          .schema('sms_gateway')
-          .from('group_members')
-          .select('contact_id')
-          .eq('group_id', widget.group.id);
-
-      final contactIds =
-          (memberIds as List).map((m) => m['contact_id'] as String).toList();
-
-      if (contactIds.isEmpty) {
-        if (mounted) {
-          setState(() {
-            members = [];
-            isLoading = false;
-          });
-        }
-        return;
-      }
-
-      final contacts = await Supabase.instance.client
-          .schema('sms_gateway')
-          .from('contacts')
-          .select()
-          .inFilter('id', contactIds);
+      final contacts =
+          await LocalDataService().getGroupContacts(widget.group.id);
 
       if (mounted) {
         setState(() {
-          members =
-              (contacts as List).map((json) => Contact.fromJson(json)).toList();
+          members = contacts;
           isLoading = false;
         });
       }

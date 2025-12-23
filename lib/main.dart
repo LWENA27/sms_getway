@@ -5,6 +5,7 @@ import 'core/constants.dart';
 import 'core/theme.dart';
 import 'core/theme_provider.dart';
 import 'core/tenant_service.dart';
+import 'services/local_data_service.dart';
 import 'screens/contacts_screen.dart';
 import 'screens/bulk_sms_screen.dart';
 import 'screens/sms_logs_screen.dart';
@@ -27,6 +28,9 @@ void main() async {
 
   // Initialize TenantService
   await TenantService().initialize();
+
+  // Initialize LocalDataService (offline-first)
+  await LocalDataService().initialize();
 
   runApp(
     ChangeNotifierProvider(
@@ -467,30 +471,23 @@ class _HomePageState extends State<HomePage> {
           currentTenantName = tenantService.tenantName;
         });
 
-        // Load counts - filter by tenant_id (data belongs to tenant, not user)
-        final contacts = await Supabase.instance.client
-            .schema('sms_gateway')
-            .from('contacts')
-            .select('id')
-            .eq('tenant_id', tenantId);
+        // Pull initial data from Supabase to local DB
+        await LocalDataService().loadTenantData(tenantId);
 
-        final groups = await Supabase.instance.client
-            .schema('sms_gateway')
-            .from('groups')
-            .select('id')
-            .eq('tenant_id', tenantId);
-
-        final logs = await Supabase.instance.client
-            .schema('sms_gateway')
-            .from('sms_logs')
-            .select('id')
-            .eq('tenant_id', tenantId);
+        // Load counts from local database (offline-first)
+        final counts = await LocalDataService().getDashboardCounts();
 
         if (mounted) {
           setState(() {
-            contactCount = (contacts as List).length;
-            groupCount = (groups as List).length;
-            smsLogCount = (logs as List).length;
+            contactCount = counts['contacts'] ?? 0;
+            groupCount = counts['groups'] ?? 0;
+            smsLogCount = counts['smsLogs'] ?? 0;
+            isLoading = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
             isLoading = false;
           });
         }

@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme.dart';
 import '../core/theme_provider.dart';
 import '../core/tenant_service.dart';
+import '../services/local_data_service.dart';
+import '../services/sync_service.dart';
 import '../main.dart';
 import 'profile_screen.dart';
 import 'tenant_selector_screen.dart';
@@ -161,6 +163,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  String _formatLastSync(DateTime? lastSync) {
+    if (lastSync == null) return 'Never';
+    final now = DateTime.now();
+    final diff = now.difference(lastSync);
+
+    if (diff.inSeconds < 60) {
+      return 'Just now';
+    } else if (diff.inMinutes < 60) {
+      return '${diff.inMinutes}m ago';
+    } else if (diff.inHours < 24) {
+      return '${diff.inHours}h ago';
+    } else {
+      return '${diff.inDays}d ago';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -294,6 +312,85 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: _showChannelDialog,
           ),
           const Divider(),
+
+          // Sync Section
+          ListenableBuilder(
+            listenable: SyncService(),
+            builder: (context, _) {
+              final syncService = SyncService();
+              return Column(
+                children: [
+                  ListTile(
+                    leading: Icon(
+                      syncService.isOnline ? Icons.cloud_done : Icons.cloud_off,
+                      color: syncService.isOnline ? Colors.green : Colors.grey,
+                    ),
+                    title: const Text('Sync Status'),
+                    subtitle: Text(
+                      syncService.isOnline
+                          ? (syncService.isSyncing
+                              ? 'Syncing...'
+                              : 'Connected - Last synced: ${_formatLastSync(syncService.lastSyncTime)}')
+                          : 'Offline - Changes will sync when online',
+                    ),
+                    trailing: syncService.isSyncing
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : IconButton(
+                            icon: const Icon(Icons.sync),
+                            onPressed: syncService.isOnline
+                                ? () async {
+                                    await LocalDataService().syncNow();
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        const SnackBar(
+                                            content: Text('Sync completed')),
+                                      );
+                                    }
+                                  }
+                                : null,
+                          ),
+                  ),
+                  FutureBuilder<int>(
+                    future: LocalDataService().getPendingSyncCount(),
+                    builder: (context, snapshot) {
+                      final pendingCount = snapshot.data ?? 0;
+                      if (pendingCount > 0) {
+                        return Container(
+                          margin: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.orange),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.pending,
+                                  color: Colors.orange, size: 20),
+                              const SizedBox(width: 8),
+                              Text(
+                                '$pendingCount pending change${pendingCount > 1 ? 's' : ''} waiting to sync',
+                                style: const TextStyle(color: Colors.orange),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ],
+              );
+            },
+          ),
+          const Divider(),
+
           ListTile(
             leading: const Icon(Icons.info),
             title: const Text('About'),

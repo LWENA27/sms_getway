@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/theme.dart';
-import '../core/tenant_service.dart';
+import '../services/local_data_service.dart';
 import '../sms/sms_log_model.dart';
 
 class SmsLogsScreen extends StatefulWidget {
@@ -24,28 +23,14 @@ class _SmsLogsScreenState extends State<SmsLogsScreen> {
 
   void _loadLogs() async {
     try {
-      final tenantId = TenantService().tenantId;
-      if (tenantId == null) return;
-
-      final response = filterStatus == 'all'
-          ? await Supabase.instance.client
-              .schema('sms_gateway')
-              .from('sms_logs')
-              .select()
-              .eq('tenant_id', tenantId)
-              .order('created_at', ascending: false)
-          : await Supabase.instance.client
-              .schema('sms_gateway')
-              .from('sms_logs')
-              .select()
-              .eq('tenant_id', tenantId)
-              .eq('status', filterStatus)
-              .order('created_at', ascending: false);
+      // Load from local database (offline-first)
+      final localLogs = await LocalDataService().getSmsLogs(
+        statusFilter: filterStatus == 'all' ? null : filterStatus,
+      );
 
       if (mounted) {
         setState(() {
-          logs =
-              (response as List).map((json) => SmsLog.fromJson(json)).toList();
+          logs = localLogs;
           isLoading = false;
         });
       }

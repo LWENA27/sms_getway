@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme.dart';
 import '../core/tenant_service.dart';
+import '../services/local_data_service.dart';
 import '../api/native_sms_service.dart';
-import '../sms/sms_log_model.dart';
 import '../contacts/contact_model.dart';
 import '../groups/group_model.dart';
 
@@ -37,27 +35,14 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
 
   void _loadData() async {
     try {
-      final tenantId = TenantService().tenantId;
-      if (tenantId == null) return;
-
-      final contacts = await Supabase.instance.client
-          .schema('sms_gateway')
-          .from('contacts')
-          .select()
-          .eq('tenant_id', tenantId);
-
-      final groups = await Supabase.instance.client
-          .schema('sms_gateway')
-          .from('groups')
-          .select()
-          .eq('tenant_id', tenantId);
+      // Load from local database (offline-first)
+      final contacts = await LocalDataService().getContacts();
+      final groups = await LocalDataService().getGroups();
 
       if (mounted) {
         setState(() {
-          availableContacts =
-              (contacts as List).map((json) => Contact.fromJson(json)).toList();
-          availableGroups =
-              (groups as List).map((json) => Group.fromJson(json)).toList();
+          availableContacts = contacts;
+          availableGroups = groups;
           isLoadingContacts = false;
         });
       }
@@ -84,23 +69,9 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
       recipients = selectedContacts;
     } else if (selectedMode == 'group' && selectedGroupId != null) {
       try {
-        final memberIds = await Supabase.instance.client
-            .schema('sms_gateway')
-            .from('group_members')
-            .select('contact_id')
-            .eq('group_id', selectedGroupId!);
-
-        final contactIds =
-            (memberIds as List).map((m) => m['contact_id'] as String).toList();
-
-        final contacts = await Supabase.instance.client
-            .schema('sms_gateway')
-            .from('contacts')
-            .select()
-            .inFilter('id', contactIds);
-
+        // Load group contacts from local database
         recipients =
-            (contacts as List).map((json) => Contact.fromJson(json)).toList();
+            await LocalDataService().getGroupContacts(selectedGroupId!);
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -139,10 +110,10 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
     setState(() => isLoading = true);
 
     try {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
       final tenantId = TenantService().tenantId;
-      if (userId == null || tenantId == null)
-        throw 'User not logged in or no tenant selected';
+      if (tenantId == null) {
+        throw 'No tenant selected';
+      }
 
       int successCount = 0;
       int failureCount = 0;
@@ -152,7 +123,6 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
         await _sendSmsUsingDevice(
           recipients: recipients,
           message: messageController.text,
-          userId: userId,
           tenantId: tenantId,
           onSuccess: (count) => successCount = count,
           onFailure: (count) => failureCount = count,
@@ -164,7 +134,6 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
         await _logSmsToDatabase(
           recipients: recipients,
           message: messageController.text,
-          userId: userId,
           tenantId: tenantId,
           channel: 'quickSMS',
           onSuccess: (count) => successCount = count,
@@ -244,7 +213,6 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
   Future<void> _sendSmsUsingDevice({
     required List<Contact> recipients,
     required String message,
-    required String userId,
     required String tenantId,
     required Function(int) onSuccess,
     required Function(int) onFailure,
@@ -272,27 +240,18 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
       debugPrint(
           '✅ Native SMS send complete: $successCount sent, $failureCount failed');
 
-      // Log successful SMS to database
+      // Log SMS to local database (offline-first)
       for (final recipient in recipients) {
         try {
           final wasSent = !failedNumbers.contains(recipient.phoneNumber);
 
-          final smsLog = SmsLog(
-            id: const Uuid().v4(),
-            userId: userId,
-            tenantId: tenantId,
-            contactId: recipient.id,
+          await LocalDataService().logSms(
             phoneNumber: recipient.phoneNumber,
             message: message,
             status: wasSent ? 'sent' : 'failed',
-            sentAt: wasSent ? DateTime.now() : null,
-            createdAt: DateTime.now(),
+            contactId: recipient.id,
+            channel: 'thisPhone',
           );
-
-          await Supabase.instance.client
-              .schema('sms_gateway')
-              .from('sms_logs')
-              .insert(smsLog.toJson());
 
           debugPrint('📊 SMS logged for ${recipient.phoneNumber}');
         } catch (e) {
@@ -311,7 +270,6 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
   Future<void> _logSmsToDatabase({
     required List<Contact> recipients,
     required String message,
-    required String userId,
     required String tenantId,
     required String channel,
     required Function(int) onSuccess,
@@ -322,22 +280,13 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
 
     for (final recipient in recipients) {
       try {
-        final smsLog = SmsLog(
-          id: const Uuid().v4(),
-          userId: userId,
-          tenantId: tenantId,
-          contactId: recipient.id,
+        await LocalDataService().logSms(
           phoneNumber: recipient.phoneNumber,
           message: message,
           status: 'sent',
-          sentAt: DateTime.now(),
-          createdAt: DateTime.now(),
+          contactId: recipient.id,
+          channel: channel,
         );
-
-        await Supabase.instance.client
-            .schema('sms_gateway')
-            .from('sms_logs')
-            .insert(smsLog.toJson());
 
         successCount++;
         debugPrint('✅ SMS logged via $channel for ${recipient.phoneNumber}');
