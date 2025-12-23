@@ -102,15 +102,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
           ),
-          ListTile(
-            leading: const Icon(Icons.dark_mode),
-            title: const Text('Dark Mode'),
-            trailing: Switch(
-              value: context.watch<ThemeProvider>().isDarkMode,
-              onChanged: (value) {
-                context.read<ThemeProvider>().toggleTheme();
-              },
-            ),
+          Consumer<ThemeProvider>(
+            builder: (context, themeProvider, child) {
+              return ListTile(
+                leading: const Icon(Icons.dark_mode),
+                title: const Text('Dark Mode'),
+                trailing: Switch(
+                  value: themeProvider.isDarkMode,
+                  onChanged: (value) {
+                    themeProvider.toggleTheme();
+                  },
+                ),
+              );
+            },
           ),
           const Divider(),
           ListTile(
