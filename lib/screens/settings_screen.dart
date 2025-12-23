@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme.dart';
 import '../core/theme_provider.dart';
+import 'profile_screen.dart';
 
 // SMS Channel options
 enum SmsChannel { thisPhone, quickSMS }
@@ -142,45 +143,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(
         title: const Text('Settings'),
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.person),
+            tooltip: 'Profile',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+              );
+            },
+          ),
+        ],
       ),
       body: ListView(
         children: [
-          const SizedBox(height: AppTheme.paddingLarge),
-          // User Profile Section
-          Padding(
-            padding: const EdgeInsets.all(AppTheme.paddingLarge),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(AppTheme.paddingLarge),
-                child: Column(
-                  children: [
-                    CircleAvatar(
-                      radius: 40,
-                      backgroundColor: AppTheme.primaryColor.withOpacity(0.2),
-                      child: const Icon(
-                        Icons.person,
-                        size: 40,
-                        color: AppTheme.primaryColor,
-                      ),
-                    ),
-                    const SizedBox(height: AppTheme.paddingMedium),
-                    Text(
-                      userEmail ?? 'User',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: AppTheme.paddingSmall),
-                    Text(
-                      'User ID: ${userId ?? 'N/A'}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Colors.grey[600],
-                          ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const Divider(),
+          const SizedBox(height: AppTheme.paddingMedium),
           // Settings Options
           ListTile(
             leading: const Icon(Icons.notifications),

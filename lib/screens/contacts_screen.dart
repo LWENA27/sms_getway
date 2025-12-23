@@ -21,7 +21,7 @@ class _ContactsScreenState extends State<ContactsScreen>
   List<Contact> contacts = [];
   List<Group> groups = [];
   bool isLoading = true;
-  
+
   // Selection mode for bulk operations
   bool isSelectionMode = false;
   Set<String> selectedContactIds = {};
@@ -1145,7 +1145,8 @@ class _ContactsScreenState extends State<ContactsScreen>
         IconButton(
           icon: const Icon(Icons.delete),
           tooltip: 'Delete selected',
-          onPressed: selectedContactIds.isEmpty ? null : _deleteSelectedContacts,
+          onPressed:
+              selectedContactIds.isEmpty ? null : _deleteSelectedContacts,
         ),
       ],
     );
@@ -1180,14 +1181,14 @@ class _ContactsScreenState extends State<ContactsScreen>
       itemBuilder: (context, index) {
         final contact = contacts[index];
         final isSelected = selectedContactIds.contains(contact.id);
-        
+
         return Card(
           margin: const EdgeInsets.symmetric(
             horizontal: AppTheme.paddingMedium,
             vertical: AppTheme.paddingSmall,
           ),
-          color: isSelected 
-              ? Theme.of(context).colorScheme.primaryContainer 
+          color: isSelected
+              ? Theme.of(context).colorScheme.primaryContainer
               : null,
           child: ListTile(
             leading: isSelectionMode
