@@ -23,8 +23,6 @@ CREATE TABLE IF NOT EXISTS "sms_gateway"."sms_requests" (
     "created_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     "updated_at" timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "sms_requests_pkey" PRIMARY KEY ("id"),
-    CONSTRAINT "sms_requests_tenant_id_fkey" FOREIGN KEY ("tenant_id") 
-        REFERENCES "sms_gateway"."users"("tenant_id") ON DELETE CASCADE,
     CONSTRAINT "sms_requests_api_key_id_fkey" FOREIGN KEY ("api_key_id") 
         REFERENCES "sms_gateway"."api_keys"("id") ON DELETE CASCADE,
     CONSTRAINT "sms_requests_status_check" 
