@@ -37,17 +37,15 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ThemeProvider>(
-      builder: (context, themeProvider, child) {
-        return MaterialApp(
-          title: AppConstants.appName,
-          theme: AppTheme.lightTheme,
-          darkTheme: AppTheme.darkTheme,
-          themeMode: themeProvider.themeMode,
-          debugShowCheckedModeBanner: false,
-          home: const AuthWrapper(),
-        );
-      },
+    final themeMode = context.select<ThemeProvider, ThemeMode>((provider) => provider.themeMode);
+    
+    return MaterialApp(
+      title: AppConstants.appName,
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: themeMode,
+      debugShowCheckedModeBanner: false,
+      home: const AuthWrapper(),
     );
   }
 }
