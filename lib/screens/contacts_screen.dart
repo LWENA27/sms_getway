@@ -179,6 +179,41 @@ class _ContactsScreenState extends State<ContactsScreen>
     );
   }
 
+  /// Default country code for phone number formatting (Tanzania)
+  static const String _defaultCountryCode = '+255';
+
+  /// Format phone number to international format
+  /// Converts local numbers like 0653489534 to +255653489534
+  String _formatPhoneNumber(String phone) {
+    // Remove all non-digit characters except +
+    phone = phone.replaceAll(RegExp(r'[^\d+]'), '');
+
+    if (phone.isEmpty) return '';
+
+    // Already has + prefix - assume it's international
+    if (phone.startsWith('+')) {
+      return phone;
+    }
+
+    // Starts with 00 - replace with +
+    if (phone.startsWith('00')) {
+      return '+${phone.substring(2)}';
+    }
+
+    // Starts with 0 - replace with country code
+    if (phone.startsWith('0')) {
+      return '$_defaultCountryCode${phone.substring(1)}';
+    }
+
+    // Starts with country code without + (e.g., 255...)
+    if (phone.startsWith('255') && phone.length >= 12) {
+      return '+$phone';
+    }
+
+    // Otherwise, assume local and add country code
+    return '$_defaultCountryCode$phone';
+  }
+
   /// Import contacts from a CSV file
   void _importCsvContacts() async {
     try {
@@ -213,7 +248,7 @@ class _ContactsScreenState extends State<ContactsScreen>
             children: [
               CircularProgressIndicator(),
               SizedBox(width: 20),
-              Text('Importing contacts...'),
+              Text('Reading file...'),
             ],
           ),
         ),
@@ -223,9 +258,11 @@ class _ContactsScreenState extends State<ContactsScreen>
       final fileContent = await File(file.path!).readAsString();
       final csvTable = const CsvToListConverter().convert(fileContent);
 
+      // Close loading dialog
+      if (mounted) Navigator.pop(context);
+
       if (csvTable.isEmpty) {
         if (mounted) {
-          Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('CSV file is empty')),
           );
@@ -233,121 +270,71 @@ class _ContactsScreenState extends State<ContactsScreen>
         return;
       }
 
-      // Get user info
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) {
-        if (mounted) {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('User not logged in')),
-          );
-        }
-        return;
-      }
-
-      // Get tenant_id
-      final userProfile = await Supabase.instance.client
-          .schema('sms_gateway')
-          .from('users')
-          .select('tenant_id')
-          .eq('id', userId)
-          .single();
-      final tenantId = userProfile['tenant_id'] as String;
-
       // Detect header row and find columns
       int nameIndex = 0;
       int phoneIndex = 1;
       int startRow = 0;
 
-      // Check if first row is header
       if (csvTable.isNotEmpty) {
         final firstRow = csvTable[0];
         for (int i = 0; i < firstRow.length; i++) {
           final cell = firstRow[i].toString().toLowerCase().trim();
           if (cell.contains('name')) {
             nameIndex = i;
-            startRow = 1; // Skip header
+            startRow = 1;
           } else if (cell.contains('phone') ||
               cell.contains('number') ||
               cell.contains('mobile')) {
             phoneIndex = i;
-            startRow = 1; // Skip header
+            startRow = 1;
           }
         }
       }
 
-      // Process contacts
-      int imported = 0;
-      int skipped = 0;
-      int errors = 0;
-      List<String> errorMessages = [];
+      // Parse contacts for preview
+      List<Map<String, String>> parsedContacts = [];
+      List<String> warnings = [];
 
       for (int i = startRow; i < csvTable.length; i++) {
         final row = csvTable[i];
-
-        // Ensure row has enough columns
-        if (row.length < 2) {
-          skipped++;
-          continue;
-        }
+        if (row.length < 2) continue;
 
         String name = row[nameIndex].toString().trim();
-        String phone = row[phoneIndex].toString().trim();
+        String rawPhone = row[phoneIndex].toString().trim();
+        String formattedPhone = _formatPhoneNumber(rawPhone);
 
-        // Clean phone number - remove spaces, keep +, digits
-        phone = phone.replaceAll(RegExp(r'[^\d+]'), '');
-
-        // Validate
-        if (name.isEmpty || phone.isEmpty) {
-          skipped++;
+        if (name.isEmpty || formattedPhone.isEmpty) {
+          warnings.add('Row ${i + 1}: Missing name or phone');
           continue;
         }
 
-        // Validate phone number (at least 8 digits)
-        if (phone.replaceAll('+', '').length < 8) {
-          skipped++;
-          errorMessages.add('Row ${i + 1}: Invalid phone "$phone"');
+        // Validate phone (at least 10 digits for international)
+        if (formattedPhone.replaceAll('+', '').length < 10) {
+          warnings.add('Row ${i + 1}: Invalid phone "$rawPhone"');
           continue;
         }
 
-        try {
-          // Insert contact
-          await Supabase.instance.client
-              .schema('sms_gateway')
-              .from('contacts')
-              .insert({
-            'id': const Uuid().v4(),
-            'user_id': userId,
-            'tenant_id': tenantId,
-            'name': name,
-            'phone_number': phone,
-          });
-          imported++;
-        } catch (e) {
-          // Check for duplicate
-          if (e.toString().contains('duplicate') ||
-              e.toString().contains('unique')) {
-            skipped++;
-            errorMessages.add('Row ${i + 1}: Duplicate contact "$name"');
-          } else {
-            errors++;
-            errorMessages.add('Row ${i + 1}: $e');
-          }
-        }
+        parsedContacts.add({
+          'name': name,
+          'phone': formattedPhone,
+          'original': rawPhone,
+        });
       }
 
-      // Close loading dialog
-      if (mounted) Navigator.pop(context);
+      if (parsedContacts.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No valid contacts found in file')),
+          );
+        }
+        return;
+      }
 
-      // Reload contacts
-      _loadContacts();
-
-      // Show result dialog
+      // Show confirmation screen
       if (mounted) {
-        _showImportResultDialog(imported, skipped, errors, errorMessages);
+        _showImportConfirmation(parsedContacts, warnings, 'CSV');
       }
     } catch (e) {
-      // Close loading dialog if open
       if (mounted && Navigator.canPop(context)) {
         Navigator.pop(context);
       }
@@ -393,7 +380,7 @@ class _ContactsScreenState extends State<ContactsScreen>
             children: [
               CircularProgressIndicator(),
               SizedBox(width: 20),
-              Text('Importing contacts from VCF...'),
+              Text('Reading VCF file...'),
             ],
           ),
         ),
@@ -403,9 +390,11 @@ class _ContactsScreenState extends State<ContactsScreen>
       final fileContent = await File(file.path!).readAsString();
       final vcards = _parseVcf(fileContent);
 
+      // Close loading dialog
+      if (mounted) Navigator.pop(context);
+
       if (vcards.isEmpty) {
         if (mounted) {
-          Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('VCF file is empty or invalid')),
           );
@@ -413,6 +402,259 @@ class _ContactsScreenState extends State<ContactsScreen>
         return;
       }
 
+      // Parse contacts for preview with formatted phone numbers
+      List<Map<String, String>> parsedContacts = [];
+      List<String> warnings = [];
+
+      for (int i = 0; i < vcards.length; i++) {
+        final vcard = vcards[i];
+        final name = vcard['name'] ?? '';
+        final rawPhone = vcard['phone'] ?? '';
+        final formattedPhone = _formatPhoneNumber(rawPhone);
+
+        if (name.isEmpty || formattedPhone.isEmpty) {
+          warnings.add('Contact ${i + 1}: Missing name or phone');
+          continue;
+        }
+
+        // Validate phone (at least 10 digits for international)
+        if (formattedPhone.replaceAll('+', '').length < 10) {
+          warnings.add('Contact ${i + 1}: Invalid phone "$rawPhone"');
+          continue;
+        }
+
+        parsedContacts.add({
+          'name': name,
+          'phone': formattedPhone,
+          'original': rawPhone,
+        });
+      }
+
+      if (parsedContacts.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No valid contacts found in file')),
+          );
+        }
+        return;
+      }
+
+      // Show confirmation screen
+      if (mounted) {
+        _showImportConfirmation(parsedContacts, warnings, 'VCF');
+      }
+    } catch (e) {
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('VCF import error: $e')),
+        );
+      }
+    }
+  }
+
+  /// Show confirmation dialog before importing contacts
+  void _showImportConfirmation(
+    List<Map<String, String>> contacts,
+    List<String> warnings,
+    String source,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) => Column(
+          children: [
+            // Handle bar
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            // Header
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(
+                    source == 'CSV' ? Icons.table_chart : Icons.contact_phone,
+                    color: AppTheme.primaryColor,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Import from $source',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        Text(
+                          '${contacts.length} contacts ready to import',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Warnings if any
+            if (warnings.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning, color: Colors.orange, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${warnings.length} contacts skipped (invalid data)',
+                        style: const TextStyle(color: Colors.orange),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 8),
+            // Info about phone format
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info, color: Colors.blue, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Numbers will be converted to international format ($_defaultCountryCode)',
+                      style: const TextStyle(color: Colors.blue, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Divider(),
+            // Contact list preview
+            Expanded(
+              child: ListView.builder(
+                controller: scrollController,
+                itemCount: contacts.length,
+                itemBuilder: (context, index) {
+                  final contact = contacts[index];
+                  final showConversion =
+                      contact['original'] != contact['phone'];
+                  return ListTile(
+                    leading: CircleAvatar(
+                      child: Text(contact['name']![0].toUpperCase()),
+                    ),
+                    title: Text(contact['name']!),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          contact['phone']!,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w500,
+                            color: Colors.green,
+                          ),
+                        ),
+                        if (showConversion)
+                          Text(
+                            'Original: ${contact['original']}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                      ],
+                    ),
+                    trailing: const Icon(
+                      Icons.check_circle,
+                      color: Colors.green,
+                      size: 20,
+                    ),
+                  );
+                },
+              ),
+            ),
+            // Action buttons
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _executeImport(contacts);
+                        },
+                        icon: const Icon(Icons.download),
+                        label: Text('Import ${contacts.length} Contacts'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Execute the actual import after confirmation
+  void _executeImport(List<Map<String, String>> contacts) async {
+    // Show progress dialog
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Text('Importing contacts...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
       // Get user info
       final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId == null) {
@@ -434,36 +676,17 @@ class _ContactsScreenState extends State<ContactsScreen>
           .single();
       final tenantId = userProfile['tenant_id'] as String;
 
-      // Process contacts
       int imported = 0;
       int skipped = 0;
       int errors = 0;
       List<String> errorMessages = [];
 
-      for (int i = 0; i < vcards.length; i++) {
-        final vcard = vcards[i];
-        final name = vcard['name'] ?? '';
-        var phone = vcard['phone'] ?? '';
-
-        // Clean phone number
-        phone = phone.replaceAll(RegExp(r'[^\d+]'), '');
-
-        // Validate
-        if (name.isEmpty || phone.isEmpty) {
-          skipped++;
-          errorMessages.add('Contact ${i + 1}: Missing name or phone');
-          continue;
-        }
-
-        // Validate phone number (at least 8 digits)
-        if (phone.replaceAll('+', '').length < 8) {
-          skipped++;
-          errorMessages.add('Contact ${i + 1}: Invalid phone "$phone"');
-          continue;
-        }
+      for (int i = 0; i < contacts.length; i++) {
+        final contact = contacts[i];
+        final name = contact['name']!;
+        final phone = contact['phone']!;
 
         try {
-          // Insert contact
           await Supabase.instance.client
               .schema('sms_gateway')
               .from('contacts')
@@ -476,36 +699,34 @@ class _ContactsScreenState extends State<ContactsScreen>
           });
           imported++;
         } catch (e) {
-          // Check for duplicate
           if (e.toString().contains('duplicate') ||
               e.toString().contains('unique')) {
             skipped++;
-            errorMessages.add('Contact ${i + 1}: Duplicate "$name"');
+            errorMessages.add('${i + 1}. "$name": Duplicate');
           } else {
             errors++;
-            errorMessages.add('Contact ${i + 1}: $e');
+            errorMessages.add('${i + 1}. "$name": $e');
           }
         }
       }
 
-      // Close loading dialog
+      // Close progress dialog
       if (mounted) Navigator.pop(context);
 
       // Reload contacts
       _loadContacts();
 
-      // Show result dialog
+      // Show result
       if (mounted) {
         _showImportResultDialog(imported, skipped, errors, errorMessages);
       }
     } catch (e) {
-      // Close loading dialog if open
       if (mounted && Navigator.canPop(context)) {
         Navigator.pop(context);
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('VCF import error: $e')),
+          SnackBar(content: Text('Import error: $e')),
         );
       }
     }
@@ -849,11 +1070,56 @@ class _AddContactDialogState extends State<AddContactDialog> {
   final nameController = TextEditingController();
   final phoneController = TextEditingController();
   bool isLoading = false;
+  String? formattedPhone;
+
+  /// Default country code for phone number formatting (Tanzania)
+  static const String _defaultCountryCode = '+255';
+
+  /// Format phone number to international format
+  String _formatPhoneNumber(String phone) {
+    phone = phone.replaceAll(RegExp(r'[^\d+]'), '');
+    if (phone.isEmpty) return '';
+    if (phone.startsWith('+')) return phone;
+    if (phone.startsWith('00')) return '+${phone.substring(2)}';
+    if (phone.startsWith('0'))
+      return '$_defaultCountryCode${phone.substring(1)}';
+    if (phone.startsWith('255') && phone.length >= 12) return '+$phone';
+    return '$_defaultCountryCode$phone';
+  }
+
+  void _updateFormattedPhone() {
+    final raw = phoneController.text.trim();
+    if (raw.isNotEmpty) {
+      setState(() {
+        formattedPhone = _formatPhoneNumber(raw);
+      });
+    } else {
+      setState(() {
+        formattedPhone = null;
+      });
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    phoneController.addListener(_updateFormattedPhone);
+  }
 
   void _save() async {
     if (nameController.text.isEmpty || phoneController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please fill all fields')),
+      );
+      return;
+    }
+
+    final phone = _formatPhoneNumber(phoneController.text.trim());
+
+    // Validate phone (at least 10 digits for international)
+    if (phone.replaceAll('+', '').length < 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid phone number')),
       );
       return;
     }
@@ -879,7 +1145,7 @@ class _AddContactDialogState extends State<AddContactDialog> {
         userId: userId,
         tenantId: tenantId,
         name: nameController.text,
-        phoneNumber: phoneController.text,
+        phoneNumber: phone, // Use formatted phone
         createdAt: DateTime.now(),
       );
 
@@ -921,9 +1187,16 @@ class _AddContactDialogState extends State<AddContactDialog> {
           const SizedBox(height: 16),
           TextField(
             controller: phoneController,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Phone Number',
-              hintText: '+1234567890',
+              hintText: '0653489534',
+              helperText: formattedPhone != null
+                  ? 'Will be saved as: $formattedPhone'
+                  : 'Numbers will be formatted to international format',
+              helperStyle: TextStyle(
+                color: formattedPhone != null ? Colors.green : Colors.grey,
+                fontSize: 12,
+              ),
             ),
             keyboardType: TextInputType.phone,
           ),

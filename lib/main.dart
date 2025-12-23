@@ -558,39 +558,6 @@ class _HomePageState extends State<HomePage> {
                     description: 'Track sent messages',
                     isDone: true,
                   ),
-                  const SizedBox(height: AppTheme.paddingLarge),
-                  // Info box
-                  Container(
-                    padding: const EdgeInsets.all(AppTheme.paddingMedium),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withOpacity(0.1),
-                      borderRadius:
-                          BorderRadius.circular(AppTheme.radiusMedium),
-                      border: Border.all(color: AppTheme.primaryColor),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '✅ System Status',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: AppTheme.paddingSmall),
-                        Text(
-                          '✓ Supabase connected',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        Text(
-                          '✓ Authentication working',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        Text(
-                          '✓ Database accessible',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
             ),
