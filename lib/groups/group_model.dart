@@ -2,6 +2,7 @@
 class Group {
   final String id;
   final String userId;
+  final String? tenantId;
   final String name;
   final DateTime createdAt;
   final int? memberCount;
@@ -9,6 +10,7 @@ class Group {
   Group({
     required this.id,
     required this.userId,
+    this.tenantId,
     required this.name,
     required this.createdAt,
     this.memberCount,
@@ -19,6 +21,7 @@ class Group {
     return Group(
       id: json['id'] as String,
       userId: json['user_id'] as String,
+      tenantId: json['tenant_id'] as String?,
       name: json['name'] ?? json['group_name'] as String,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
@@ -28,6 +31,7 @@ class Group {
   Map<String, dynamic> toJson() => {
         'id': id,
         'user_id': userId,
+        if (tenantId != null) 'tenant_id': tenantId,
         'name': name,
         'created_at': createdAt.toIso8601String(),
       };
@@ -36,6 +40,7 @@ class Group {
   Group copyWith({
     String? id,
     String? userId,
+    String? tenantId,
     String? name,
     DateTime? createdAt,
     int? memberCount,
@@ -43,6 +48,7 @@ class Group {
     return Group(
       id: id ?? this.id,
       userId: userId ?? this.userId,
+      tenantId: tenantId ?? this.tenantId,
       name: name ?? this.name,
       createdAt: createdAt ?? this.createdAt,
       memberCount: memberCount ?? this.memberCount,
@@ -69,12 +75,14 @@ class GroupMember {
   final String id;
   final String groupId;
   final String contactId;
+  final String? tenantId;
   final DateTime addedAt;
 
   GroupMember({
     required this.id,
     required this.groupId,
     required this.contactId,
+    this.tenantId,
     required this.addedAt,
   });
 
@@ -84,6 +92,7 @@ class GroupMember {
       id: json['id'] as String,
       groupId: json['group_id'] as String,
       contactId: json['contact_id'] as String,
+      tenantId: json['tenant_id'] as String?,
       addedAt: DateTime.parse(
         json['added_at'] as String? ?? json['created_at'] as String,
       ),
@@ -94,6 +103,7 @@ class GroupMember {
   Map<String, dynamic> toJson() => {
         'group_id': groupId,
         'contact_id': contactId,
+        if (tenantId != null) 'tenant_id': tenantId,
       };
 
   @override

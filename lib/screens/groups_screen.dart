@@ -216,11 +216,22 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
       final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId == null) throw 'User not found';
 
+      // Get tenant_id from sms_gateway.users
+      final userProfile = await Supabase.instance.client
+          .schema('sms_gateway')
+          .from('users')
+          .select('tenant_id')
+          .eq('id', userId)
+          .single();
+
+      final tenantId = userProfile['tenant_id'] as String;
+
       final groupId = DateTime.now().millisecondsSinceEpoch.toString();
 
       final group = Group(
         id: groupId,
         userId: userId,
+        tenantId: tenantId,
         name: nameController.text,
         createdAt: DateTime.now(),
         memberCount: selectedContacts.length,
@@ -237,6 +248,7 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
           id: '${groupId}_${contact.id}',
           groupId: groupId,
           contactId: contact.id,
+          tenantId: tenantId,
           addedAt: DateTime.now(),
         );
         await Supabase.instance.client

@@ -172,9 +172,20 @@ class _AddContactDialogState extends State<AddContactDialog> {
       final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId == null) throw 'User not found';
 
+      // Get tenant_id from sms_gateway.users
+      final userProfile = await Supabase.instance.client
+          .schema('sms_gateway')
+          .from('users')
+          .select('tenant_id')
+          .eq('id', userId)
+          .single();
+
+      final tenantId = userProfile['tenant_id'] as String;
+
       final contact = Contact(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         userId: userId,
+        tenantId: tenantId,
         name: nameController.text,
         phoneNumber: phoneController.text,
         createdAt: DateTime.now(),
