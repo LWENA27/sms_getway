@@ -2,6 +2,7 @@
 class SmsLog {
   final String id;
   final String userId;
+  final String? tenantId;
   final String? contactId;
   final String phoneNumber;
   final String message;
@@ -13,6 +14,7 @@ class SmsLog {
   SmsLog({
     required this.id,
     required this.userId,
+    this.tenantId,
     this.contactId,
     required this.phoneNumber,
     required this.message,
@@ -27,6 +29,7 @@ class SmsLog {
     return SmsLog(
       id: json['id'] as String,
       userId: json['user_id'] as String,
+      tenantId: json['tenant_id'] as String?,
       contactId: json['contact_id'] as String?,
       phoneNumber: json['phone_number'] ?? json['recipient'] as String,
       message: json['message'] as String,
@@ -43,6 +46,7 @@ class SmsLog {
   Map<String, dynamic> toJson() => {
         'id': id,
         'user_id': userId,
+        'tenant_id': tenantId,
         'contact_id': contactId,
         'phone_number': phoneNumber,
         'message': message,
@@ -56,6 +60,7 @@ class SmsLog {
   SmsLog copyWith({
     String? id,
     String? userId,
+    String? tenantId,
     String? contactId,
     String? phoneNumber,
     String? message,
@@ -67,6 +72,7 @@ class SmsLog {
     return SmsLog(
       id: id ?? this.id,
       userId: userId ?? this.userId,
+      tenantId: tenantId ?? this.tenantId,
       contactId: contactId ?? this.contactId,
       phoneNumber: phoneNumber ?? this.phoneNumber,
       message: message ?? this.message,

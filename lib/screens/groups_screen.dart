@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 import '../core/theme.dart';
 import '../groups/group_model.dart';
 import '../contacts/contact_model.dart';
@@ -226,7 +227,7 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
 
       final tenantId = userProfile['tenant_id'] as String;
 
-      final groupId = DateTime.now().millisecondsSinceEpoch.toString();
+      final groupId = const Uuid().v4();
 
       final group = Group(
         id: groupId,
@@ -245,7 +246,7 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
       // Add members
       for (final contact in selectedContacts) {
         final member = GroupMember(
-          id: '${groupId}_${contact.id}',
+          id: const Uuid().v4(),
           groupId: groupId,
           contactId: contact.id,
           tenantId: tenantId,

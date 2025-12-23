@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:uuid/uuid.dart';
 import '../core/theme.dart';
 import '../sms/sms_log_model.dart';
 import '../contacts/contact_model.dart';
@@ -35,12 +36,14 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
       if (userId == null) return;
 
       final contacts = await Supabase.instance.client
-          .schema('sms_gateway').from('contacts')
+          .schema('sms_gateway')
+          .from('contacts')
           .select()
           .eq('user_id', userId);
 
       final groups = await Supabase.instance.client
-          .schema('sms_gateway').from('groups')
+          .schema('sms_gateway')
+          .from('groups')
           .select()
           .eq('user_id', userId);
 
@@ -77,7 +80,8 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
     } else if (selectedMode == 'group' && selectedGroupId != null) {
       try {
         final memberIds = await Supabase.instance.client
-            .schema('sms_gateway').from('group_members')
+            .schema('sms_gateway')
+            .from('group_members')
             .select('contact_id')
             .eq('group_id', selectedGroupId!);
 
@@ -85,7 +89,8 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
             (memberIds as List).map((m) => m['contact_id'] as String).toList();
 
         final contacts = await Supabase.instance.client
-            .schema('sms_gateway').from('contacts')
+            .schema('sms_gateway')
+            .from('contacts')
             .select()
             .inFilter('id', contactIds);
 
@@ -125,6 +130,16 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
       final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId == null) throw 'User not found';
 
+      // Get tenant_id from sms_gateway.users
+      final userProfile = await Supabase.instance.client
+          .schema('sms_gateway')
+          .from('users')
+          .select('tenant_id')
+          .eq('id', userId)
+          .single();
+
+      final tenantId = userProfile['tenant_id'] as String;
+
       int successCount = 0;
       int failureCount = 0;
 
@@ -134,8 +149,9 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
           // For now, we'll simulate sending and log to database
 
           final smsLog = SmsLog(
-            id: '${DateTime.now().millisecondsSinceEpoch}_${recipient.id}',
+            id: const Uuid().v4(),
             userId: userId,
+            tenantId: tenantId,
             contactId: recipient.id,
             phoneNumber: recipient.phoneNumber,
             message: messageController.text,
@@ -145,7 +161,8 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
           );
 
           await Supabase.instance.client
-              .schema('sms_gateway').from('sms_logs')
+              .schema('sms_gateway')
+              .from('sms_logs')
               .insert(smsLog.toJson());
 
           successCount++;
