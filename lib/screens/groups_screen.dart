@@ -384,12 +384,15 @@ class GroupMembersDialog extends StatefulWidget {
 
 class _GroupMembersDialogState extends State<GroupMembersDialog> {
   List<Contact> members = [];
+  List<Contact> availableContacts = [];
   bool isLoading = true;
+  bool isLoadingAction = false;
 
   @override
   void initState() {
     super.initState();
     _loadMembers();
+    _loadAvailableContacts();
   }
 
   void _loadMembers() async {
@@ -402,6 +405,16 @@ class _GroupMembersDialogState extends State<GroupMembersDialog> {
 
       final contactIds =
           (memberIds as List).map((m) => m['contact_id'] as String).toList();
+
+      if (contactIds.isEmpty) {
+        if (mounted) {
+          setState(() {
+            members = [];
+            isLoading = false;
+          });
+        }
+        return;
+      }
 
       final contacts = await Supabase.instance.client
           .schema('sms_gateway')
@@ -426,10 +439,144 @@ class _GroupMembersDialogState extends State<GroupMembersDialog> {
     }
   }
 
+  void _loadAvailableContacts() async {
+    try {
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId == null) return;
+
+      final response = await Supabase.instance.client
+          .schema('sms_gateway')
+          .from('contacts')
+          .select()
+          .eq('user_id', userId);
+
+      if (mounted) {
+        setState(() {
+          availableContacts =
+              (response as List).map((json) => Contact.fromJson(json)).toList();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading contacts: $e')),
+        );
+      }
+    }
+  }
+
+  void _removeMember(Contact member) async {
+    try {
+      setState(() => isLoadingAction = true);
+      
+      await Supabase.instance.client
+          .schema('sms_gateway')
+          .from('group_members')
+          .delete()
+          .eq('group_id', widget.group.id)
+          .eq('contact_id', member.id);
+
+      if (mounted) {
+        setState(() {
+          members.removeWhere((c) => c.id == member.id);
+          isLoadingAction = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${member.name} removed from group')),
+        );
+        widget.onUpdate();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => isLoadingAction = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error removing member: $e')),
+        );
+      }
+    }
+  }
+
+  void _showAddMemberDialog() {
+    final nonMembers = availableContacts
+        .where((c) => !members.any((m) => m.id == c.id))
+        .toList();
+
+    if (nonMembers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('All contacts are already members')),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add Member'),
+        content: SizedBox(
+          width: 300,
+          height: 300,
+          child: ListView.builder(
+            itemCount: nonMembers.length,
+            itemBuilder: (context, index) {
+              final contact = nonMembers[index];
+              return ListTile(
+                title: Text(contact.name),
+                subtitle: Text(contact.phoneNumber),
+                trailing: IconButton(
+                  icon: const Icon(Icons.add, color: Colors.green),
+                  onPressed: () async {
+                    try {
+                      final tenantId = widget.group.tenantId;
+                      final member = GroupMember(
+                        id: const Uuid().v4(),
+                        groupId: widget.group.id,
+                        contactId: contact.id,
+                        tenantId: tenantId,
+                        addedAt: DateTime.now(),
+                      );
+                      await Supabase.instance.client
+                          .schema('sms_gateway')
+                          .from('group_members')
+                          .insert(member.toJson());
+
+                      if (mounted) {
+                        setState(() {
+                          members.add(contact);
+                        });
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                              content: Text('${contact.name} added to group')),
+                        );
+                        widget.onUpdate();
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error: $e')),
+                        );
+                      }
+                    }
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('${widget.group.name} Members'),
+      title: Text('${widget.group.name} Members (${members.length})'),
       content: isLoading
           ? const SizedBox(
               width: 300,
@@ -445,14 +592,38 @@ class _GroupMembersDialogState extends State<GroupMembersDialog> {
                       itemCount: members.length,
                       itemBuilder: (context, index) {
                         final member = members[index];
-                        return ListTile(
-                          title: Text(member.name),
-                          subtitle: Text(member.phoneNumber),
+                        return Card(
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          child: ListTile(
+                            title: Text(member.name),
+                            subtitle: Text(member.phoneNumber),
+                            trailing: SizedBox(
+                              width: 100,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.person_remove,
+                                        color: Colors.red),
+                                    tooltip: 'Remove',
+                                    onPressed: isLoadingAction
+                                        ? null
+                                        : () => _removeMember(member),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         );
                       },
                     ),
             ),
       actions: [
+        ElevatedButton.icon(
+          onPressed: _showAddMemberDialog,
+          icon: const Icon(Icons.person_add),
+          label: const Text('Add Member'),
+        ),
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Close'),

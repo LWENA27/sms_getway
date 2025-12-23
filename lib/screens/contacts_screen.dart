@@ -140,13 +140,17 @@ class _ContactsScreenState extends State<ContactsScreen>
           .delete()
           .eq('id', id);
       _loadContacts();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Contact deleted')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Contact deleted')),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
     }
   }
 
