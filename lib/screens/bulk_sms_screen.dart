@@ -8,7 +8,9 @@ import '../contacts/contact_model.dart';
 import '../groups/group_model.dart';
 
 class BulkSmsScreen extends StatefulWidget {
-  const BulkSmsScreen({super.key});
+  final VoidCallback? onNavigateToLogs;
+  
+  const BulkSmsScreen({super.key, this.onNavigateToLogs});
 
   @override
   State<BulkSmsScreen> createState() => _BulkSmsScreenState();
@@ -176,26 +178,52 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
         setState(() => isLoading = false);
         showDialog(
           context: context,
+          barrierDismissible: false,
           builder: (context) => AlertDialog(
-            title: const Text('SMS Sent'),
+            title: const Text('SMS Sent Successfully!'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const Icon(
+                  Icons.check_circle,
+                  color: Colors.green,
+                  size: 48,
+                ),
+                const SizedBox(height: 16),
                 Text('✅ Success: $successCount'),
                 const SizedBox(height: 8),
                 if (failureCount > 0) Text('❌ Failed: $failureCount'),
+                const SizedBox(height: 16),
+                const Text(
+                  'What would you like to do next?',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
               ],
             ),
             actions: [
-              ElevatedButton(
+              OutlinedButton.icon(
                 onPressed: () {
                   Navigator.pop(context);
                   messageController.clear();
                   selectedContacts.clear();
                   setState(() {});
                 },
-                child: const Text('Done'),
+                icon: const Icon(Icons.refresh),
+                label: const Text('Send More'),
+              ),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  messageController.clear();
+                  selectedContacts.clear();
+                  // Navigate to Logs screen
+                  if (widget.onNavigateToLogs != null) {
+                    widget.onNavigateToLogs!();
+                  }
+                },
+                icon: const Icon(Icons.history),
+                label: const Text('View Logs'),
               ),
             ],
           ),

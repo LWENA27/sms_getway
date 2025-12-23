@@ -370,7 +370,13 @@ class _HomePageState extends State<HomePage> {
     final screens = [
       _buildDashboard(),
       const ContactsScreen(),
-      const BulkSmsScreen(),
+      BulkSmsScreen(
+        onNavigateToLogs: () {
+          setState(() {
+            _currentIndex = 3; // Navigate to Logs tab
+          });
+        },
+      ),
       const SmsLogsScreen(),
       const SettingsScreen(),
     ];

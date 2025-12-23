@@ -12,7 +12,8 @@ class ContactsScreen extends StatefulWidget {
   State<ContactsScreen> createState() => _ContactsScreenState();
 }
 
-class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProviderStateMixin {
+class _ContactsScreenState extends State<ContactsScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   List<Contact> contacts = [];
   List<Group> groups = [];
@@ -89,8 +90,8 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
           groups = (response as List).map((json) {
             final group = Group.fromJson(json);
             // Count the actual members from the joined data
-            final memberCount = json['group_members'] != null 
-                ? (json['group_members'] as List).length 
+            final memberCount = json['group_members'] != null
+                ? (json['group_members'] as List).length
                 : 0;
             return group.copyWith(memberCount: memberCount);
           }).toList();
@@ -213,14 +214,13 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
     if (isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
-    
+
     if (contacts.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.contacts_outlined,
-                size: 64, color: Colors.grey),
+            const Icon(Icons.contacts_outlined, size: 64, color: Colors.grey),
             const SizedBox(height: 16),
             const Text('No contacts yet'),
             const SizedBox(height: 16),
@@ -233,7 +233,7 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
         ),
       );
     }
-    
+
     return ListView.builder(
       itemCount: contacts.length,
       itemBuilder: (context, index) {
@@ -269,8 +269,7 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.group_outlined,
-                size: 64, color: Colors.grey),
+            const Icon(Icons.group_outlined, size: 64, color: Colors.grey),
             const SizedBox(height: 16),
             const Text('No groups yet'),
             const SizedBox(height: 16),
@@ -283,7 +282,7 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
         ),
       );
     }
-    
+
     return ListView.builder(
       itemCount: groups.length,
       itemBuilder: (context, index) {
