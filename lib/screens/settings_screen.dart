@@ -42,8 +42,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final prefs = await SharedPreferences.getInstance();
       final savedChannel = prefs.getString('sms_channel') ?? 'thisPhone';
       setState(() {
-        selectedChannel =
-            savedChannel == 'quickSMS' ? SmsChannel.quickSMS : SmsChannel.thisPhone;
+        selectedChannel = savedChannel == 'quickSMS'
+            ? SmsChannel.quickSMS
+            : SmsChannel.thisPhone;
       });
       debugPrint('✅ Loaded SMS channel: $savedChannel');
     } catch (e) {
@@ -54,7 +55,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _saveChannelPreference(SmsChannel channel) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final channelName = channel == SmsChannel.quickSMS ? 'quickSMS' : 'thisPhone';
+      final channelName =
+          channel == SmsChannel.quickSMS ? 'quickSMS' : 'thisPhone';
       await prefs.setString('sms_channel', channelName);
       setState(() {
         selectedChannel = channel;

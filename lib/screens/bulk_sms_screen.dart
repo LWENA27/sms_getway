@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme.dart';
+import '../api/native_sms_service.dart';
 import '../sms/sms_log_model.dart';
 import '../contacts/contact_model.dart';
 import '../groups/group_model.dart';
@@ -115,15 +117,22 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
       return;
     }
 
-    // Request SMS permission
-    final status = await Permission.sms.request();
-    if (!status.isGranted) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('SMS permission denied')),
-        );
+    // Load selected SMS channel from SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    final selectedChannel = prefs.getString('sms_channel') ?? 'thisPhone';
+    debugPrint('📱 Using SMS Channel: $selectedChannel');
+
+    // Request SMS permission for "This Phone" channel
+    if (selectedChannel == 'thisPhone') {
+      final status = await Permission.sms.request();
+      if (!status.isGranted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('SMS permission denied')),
+          );
+        }
+        return;
       }
-      return;
     }
 
     setState(() => isLoading = true);
@@ -145,33 +154,29 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
       int successCount = 0;
       int failureCount = 0;
 
-      for (final recipient in recipients) {
-        try {
-          // TODO: Integrate with actual SMS service (Twilio, AWS SNS, etc.)
-          // For now, we'll simulate sending and log to database
-
-          final smsLog = SmsLog(
-            id: const Uuid().v4(),
-            userId: userId,
-            tenantId: tenantId,
-            contactId: recipient.id,
-            phoneNumber: recipient.phoneNumber,
-            message: messageController.text,
-            status: 'sent',
-            sentAt: DateTime.now(),
-            createdAt: DateTime.now(),
-          );
-
-          await Supabase.instance.client
-              .schema('sms_gateway')
-              .from('sms_logs')
-              .insert(smsLog.toJson());
-
-          successCount++;
-        } catch (e) {
-          failureCount++;
-          debugPrint('Error sending to ${recipient.phoneNumber}: $e');
-        }
+      if (selectedChannel == 'thisPhone') {
+        // Send SMS using device's native SMS capability
+        await _sendSmsUsingDevice(
+          recipients: recipients,
+          message: messageController.text,
+          userId: userId,
+          tenantId: tenantId,
+          onSuccess: (count) => successCount = count,
+          onFailure: (count) => failureCount = count,
+        );
+      } else if (selectedChannel == 'quickSMS') {
+        // Send SMS using QuickSMS API (to be implemented)
+        debugPrint('🚀 Using QuickSMS API channel (not yet implemented)');
+        // For now, just log to database
+        await _logSmsToDatabase(
+          recipients: recipients,
+          message: messageController.text,
+          userId: userId,
+          tenantId: tenantId,
+          channel: 'quickSMS',
+          onSuccess: (count) => successCount = count,
+          onFailure: (count) => failureCount = count,
+        );
       }
 
       if (mounted) {
@@ -194,6 +199,14 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
                 Text('✅ Success: $successCount'),
                 const SizedBox(height: 8),
                 if (failureCount > 0) Text('❌ Failed: $failureCount'),
+                const SizedBox(height: 8),
+                Text(
+                  'Channel: ${selectedChannel == 'thisPhone' ? 'This Phone' : 'QuickSMS'}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                  ),
+                ),
                 const SizedBox(height: 16),
                 const Text(
                   'What would you like to do next?',
@@ -202,28 +215,23 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
               ],
             ),
             actions: [
-              OutlinedButton.icon(
+              TextButton(
                 onPressed: () {
                   Navigator.pop(context);
                   messageController.clear();
-                  selectedContacts.clear();
-                  setState(() {});
+                  setState(() {
+                    selectedContacts = [];
+                    selectedGroupId = null;
+                  });
                 },
-                icon: const Icon(Icons.refresh),
-                label: const Text('Send More'),
+                child: const Text('Send More'),
               ),
-              ElevatedButton.icon(
+              TextButton(
                 onPressed: () {
                   Navigator.pop(context);
-                  messageController.clear();
-                  selectedContacts.clear();
-                  // Navigate to Logs screen
-                  if (widget.onNavigateToLogs != null) {
-                    widget.onNavigateToLogs!();
-                  }
+                  widget.onNavigateToLogs?.call();
                 },
-                icon: const Icon(Icons.history),
-                label: const Text('View Logs'),
+                child: const Text('View Logs'),
               ),
             ],
           ),
@@ -236,7 +244,118 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
           SnackBar(content: Text('Error: $e')),
         );
       }
+      debugPrint('❌ Error sending SMS: $e');
     }
+  }
+
+  Future<void> _sendSmsUsingDevice({
+    required List<Contact> recipients,
+    required String message,
+    required String userId,
+    required String tenantId,
+    required Function(int) onSuccess,
+    required Function(int) onFailure,
+  }) async {
+    int successCount = 0;
+    int failureCount = 0;
+
+    try {
+      // Extract phone numbers from recipients
+      final phoneNumbers = recipients.map((r) => r.phoneNumber).toList();
+
+      debugPrint(
+          '📱 Sending SMS to ${phoneNumbers.length} recipients using native Android');
+
+      // Send bulk SMS using native Android
+      final result = await NativeSmsService.sendBulkSms(
+        phoneNumbers: phoneNumbers,
+        message: message,
+      );
+
+      successCount = result['successCount'] as int;
+      final failedNumbers = result['failedNumbers'] as List<String>;
+      failureCount = failedNumbers.length;
+
+      debugPrint(
+          '✅ Native SMS send complete: $successCount sent, $failureCount failed');
+
+      // Log successful SMS to database
+      for (final recipient in recipients) {
+        try {
+          final wasSent = !failedNumbers.contains(recipient.phoneNumber);
+
+          final smsLog = SmsLog(
+            id: const Uuid().v4(),
+            userId: userId,
+            tenantId: tenantId,
+            contactId: recipient.id,
+            phoneNumber: recipient.phoneNumber,
+            message: message,
+            status: wasSent ? 'sent' : 'failed',
+            sentAt: wasSent ? DateTime.now() : null,
+            createdAt: DateTime.now(),
+          );
+
+          await Supabase.instance.client
+              .schema('sms_gateway')
+              .from('sms_logs')
+              .insert(smsLog.toJson());
+
+          debugPrint('📊 SMS logged for ${recipient.phoneNumber}');
+        } catch (e) {
+          debugPrint('❌ Error logging SMS for ${recipient.phoneNumber}: $e');
+        }
+      }
+    } catch (e) {
+      failureCount = recipients.length;
+      debugPrint('❌ Error sending bulk SMS: $e');
+    }
+
+    onSuccess(successCount);
+    onFailure(failureCount);
+  }
+
+  Future<void> _logSmsToDatabase({
+    required List<Contact> recipients,
+    required String message,
+    required String userId,
+    required String tenantId,
+    required String channel,
+    required Function(int) onSuccess,
+    required Function(int) onFailure,
+  }) async {
+    int successCount = 0;
+    int failureCount = 0;
+
+    for (final recipient in recipients) {
+      try {
+        final smsLog = SmsLog(
+          id: const Uuid().v4(),
+          userId: userId,
+          tenantId: tenantId,
+          contactId: recipient.id,
+          phoneNumber: recipient.phoneNumber,
+          message: message,
+          status: 'sent',
+          sentAt: DateTime.now(),
+          createdAt: DateTime.now(),
+        );
+
+        await Supabase.instance.client
+            .schema('sms_gateway')
+            .from('sms_logs')
+            .insert(smsLog.toJson());
+
+        successCount++;
+        debugPrint('✅ SMS logged via $channel for ${recipient.phoneNumber}');
+      } catch (e) {
+        failureCount++;
+        debugPrint('❌ Error logging SMS for ${recipient.phoneNumber}: $e');
+      }
+    }
+
+    onSuccess(successCount);
+    onFailure(failureCount);
   }
 
   @override

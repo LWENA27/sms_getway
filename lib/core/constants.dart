@@ -14,6 +14,12 @@ class AppConstants {
   static const String appDescription =
       'Professional Bulk SMS Management System';
 
+  // ===== QUICKSMS API CONFIGURATION =====
+  static const String quickSmsBaseUrl = 'https://api.quicksms.com.ng/v1';
+  // TODO: Add your QuickSMS API key here
+  static const String quickSmsApiKey = 'YOUR_QUICKSMS_API_KEY_HERE';
+  static const String quickSmsSenderId = 'SMS_GATEWAY';
+
   // ===== RATE LIMITING =====
   static const int maxSmsPerMinute = 30;
   static const int maxSmsPerDay = 500;
