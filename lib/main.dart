@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:provider/provider.dart';
 import 'core/constants.dart';
 import 'core/theme.dart';
+import 'core/theme_provider.dart';
 import 'auth/user_model.dart' as auth_models;
 import 'screens/contacts_screen.dart';
 import 'screens/bulk_sms_screen.dart';
@@ -22,7 +24,12 @@ void main() async {
     debugPrint('❌ Supabase initialization error: $e');
   }
 
-  runApp(const MyApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => ThemeProvider(),
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -30,13 +37,17 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: AppConstants.appName,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.light, // Professional light theme default
-      debugShowCheckedModeBanner: false,
-      home: const AuthWrapper(),
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        return MaterialApp(
+          title: AppConstants.appName,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: themeProvider.themeMode,
+          debugShowCheckedModeBanner: false,
+          home: const AuthWrapper(),
+        );
+      },
     );
   }
 }
@@ -74,10 +85,10 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('SMS Gateway'),
-        elevation: 0,
-      ),
+      // appBar: AppBar(
+      //   title: const Text('SMS Gateway'),
+      //   elevation: 0,
+      // ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppTheme.paddingLarge),
         child: Column(

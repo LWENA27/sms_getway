@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:provider/provider.dart';
 import '../core/theme.dart';
+import '../core/theme_provider.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -104,9 +106,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             leading: const Icon(Icons.dark_mode),
             title: const Text('Dark Mode'),
             trailing: Switch(
-              value: false,
+              value: context.watch<ThemeProvider>().isDarkMode,
               onChanged: (value) {
-                // TODO: Implement theme toggle
+                context.read<ThemeProvider>().toggleTheme();
               },
             ),
           ),

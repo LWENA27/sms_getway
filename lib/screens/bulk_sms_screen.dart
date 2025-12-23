@@ -9,7 +9,7 @@ import '../groups/group_model.dart';
 
 class BulkSmsScreen extends StatefulWidget {
   final VoidCallback? onNavigateToLogs;
-  
+
   const BulkSmsScreen({super.key, this.onNavigateToLogs});
 
   @override
