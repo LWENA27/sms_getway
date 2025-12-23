@@ -9,6 +9,8 @@ class ThemeProvider extends ChangeNotifier {
 
   bool get isDarkMode => _themeMode == ThemeMode.dark;
 
+  bool get isLoading => _isLoading;
+
   ThemeProvider() {
     _loadThemePreference();
   }
@@ -24,43 +26,78 @@ class ThemeProvider extends ChangeNotifier {
     }
   }
 
-  void toggleTheme() async {
+  Future<void> toggleTheme() async {
     // Prevent multiple rapid toggles
-    if (_isLoading) return;
+    if (_isLoading) {
+      debugPrint('⏳ Theme toggle already in progress, ignoring request');
+      return;
+    }
 
     _isLoading = true;
+    debugPrint('🔄 Starting theme toggle...');
 
     try {
-      _themeMode =
+      final newMode =
           _themeMode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
-      notifyListeners();
 
-      // Save preference
+      // Save preference FIRST before updating state
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('isDarkMode', _themeMode == ThemeMode.dark);
+      await prefs.setBool('isDarkMode', newMode == ThemeMode.dark);
+      debugPrint(
+          '✅ Theme preference saved: ${newMode == ThemeMode.dark ? "Dark" : "Light"}');
+
+      // Small delay to ensure SharedPreferences write is truly complete
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      // Update state only AFTER successful save
+      _themeMode = newMode;
+      notifyListeners();
+      debugPrint('🎨 Theme updated and listeners notified');
     } catch (e) {
-      debugPrint('Error toggling theme: $e');
+      debugPrint('❌ Error toggling theme: $e');
     } finally {
+      // Ensure _isLoading is reset
       _isLoading = false;
+      debugPrint('✓ Theme toggle complete');
     }
   }
 
-  void setThemeMode(ThemeMode mode) async {
-    if (_isLoading || _themeMode == mode) return;
+  Future<void> setThemeMode(ThemeMode mode) async {
+    if (_isLoading) {
+      debugPrint('⏳ Theme change already in progress, ignoring request');
+      return;
+    }
+
+    if (_themeMode == mode) {
+      debugPrint(
+          'ℹ️ Already in ${mode == ThemeMode.dark ? "dark" : "light"} mode');
+      return;
+    }
 
     _isLoading = true;
+    debugPrint(
+        '🔄 Starting theme change to ${mode == ThemeMode.dark ? "dark" : "light"}...');
 
     try {
-      _themeMode = mode;
-      notifyListeners();
-
-      // Save preference
+      // Save preference FIRST before updating state
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('isDarkMode', mode == ThemeMode.dark);
+      debugPrint(
+          '✅ Theme preference saved: ${mode == ThemeMode.dark ? "Dark" : "Light"}');
+
+      // Small delay to ensure SharedPreferences write is truly complete
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      // Update state only AFTER successful save
+      _themeMode = mode;
+      notifyListeners();
+      debugPrint('🎨 Theme changed and listeners notified');
     } catch (e) {
-      debugPrint('Error setting theme mode: $e');
+      debugPrint('❌ Error setting theme mode: $e');
     } finally {
+      // Ensure _isLoading is reset
       _isLoading = false;
+      debugPrint('✓ Theme change complete');
     }
   }
 }
