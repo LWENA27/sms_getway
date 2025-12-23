@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:csv/csv.dart';
 import '../core/theme.dart';
 import '../contacts/contact_model.dart';
 import '../groups/group_model.dart';
@@ -176,6 +179,300 @@ class _ContactsScreenState extends State<ContactsScreen>
     );
   }
 
+  /// Import contacts from a CSV file
+  void _importCsvContacts() async {
+    try {
+      // Pick CSV file
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv'],
+        allowMultiple: false,
+      );
+
+      if (result == null || result.files.isEmpty) {
+        return; // User cancelled
+      }
+
+      final file = result.files.first;
+      if (file.path == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not read file')),
+          );
+        }
+        return;
+      }
+
+      // Show loading dialog
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 20),
+              Text('Importing contacts...'),
+            ],
+          ),
+        ),
+      );
+
+      // Read and parse CSV
+      final fileContent = await File(file.path!).readAsString();
+      final csvTable = const CsvToListConverter().convert(fileContent);
+
+      if (csvTable.isEmpty) {
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('CSV file is empty')),
+          );
+        }
+        return;
+      }
+
+      // Get user info
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId == null) {
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('User not logged in')),
+          );
+        }
+        return;
+      }
+
+      // Get tenant_id
+      final userProfile = await Supabase.instance.client
+          .schema('sms_gateway')
+          .from('users')
+          .select('tenant_id')
+          .eq('id', userId)
+          .single();
+      final tenantId = userProfile['tenant_id'] as String;
+
+      // Detect header row and find columns
+      int nameIndex = 0;
+      int phoneIndex = 1;
+      int startRow = 0;
+
+      // Check if first row is header
+      if (csvTable.isNotEmpty) {
+        final firstRow = csvTable[0];
+        for (int i = 0; i < firstRow.length; i++) {
+          final cell = firstRow[i].toString().toLowerCase().trim();
+          if (cell.contains('name')) {
+            nameIndex = i;
+            startRow = 1; // Skip header
+          } else if (cell.contains('phone') ||
+              cell.contains('number') ||
+              cell.contains('mobile')) {
+            phoneIndex = i;
+            startRow = 1; // Skip header
+          }
+        }
+      }
+
+      // Process contacts
+      int imported = 0;
+      int skipped = 0;
+      int errors = 0;
+      List<String> errorMessages = [];
+
+      for (int i = startRow; i < csvTable.length; i++) {
+        final row = csvTable[i];
+
+        // Ensure row has enough columns
+        if (row.length < 2) {
+          skipped++;
+          continue;
+        }
+
+        String name = row[nameIndex].toString().trim();
+        String phone = row[phoneIndex].toString().trim();
+
+        // Clean phone number - remove spaces, keep +, digits
+        phone = phone.replaceAll(RegExp(r'[^\d+]'), '');
+
+        // Validate
+        if (name.isEmpty || phone.isEmpty) {
+          skipped++;
+          continue;
+        }
+
+        // Validate phone number (at least 8 digits)
+        if (phone.replaceAll('+', '').length < 8) {
+          skipped++;
+          errorMessages.add('Row ${i + 1}: Invalid phone "$phone"');
+          continue;
+        }
+
+        try {
+          // Insert contact
+          await Supabase.instance.client
+              .schema('sms_gateway')
+              .from('contacts')
+              .insert({
+            'id': const Uuid().v4(),
+            'user_id': userId,
+            'tenant_id': tenantId,
+            'name': name,
+            'phone_number': phone,
+          });
+          imported++;
+        } catch (e) {
+          // Check for duplicate
+          if (e.toString().contains('duplicate') ||
+              e.toString().contains('unique')) {
+            skipped++;
+            errorMessages.add('Row ${i + 1}: Duplicate contact "$name"');
+          } else {
+            errors++;
+            errorMessages.add('Row ${i + 1}: $e');
+          }
+        }
+      }
+
+      // Close loading dialog
+      if (mounted) Navigator.pop(context);
+
+      // Reload contacts
+      _loadContacts();
+
+      // Show result dialog
+      if (mounted) {
+        _showImportResultDialog(imported, skipped, errors, errorMessages);
+      }
+    } catch (e) {
+      // Close loading dialog if open
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Import error: $e')),
+        );
+      }
+    }
+  }
+
+  void _showImportResultDialog(
+      int imported, int skipped, int errors, List<String> errorMessages) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              imported > 0 ? Icons.check_circle : Icons.info,
+              color: imported > 0 ? Colors.green : Colors.orange,
+            ),
+            const SizedBox(width: 8),
+            const Text('Import Complete'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildResultRow(Icons.check, Colors.green, 'Imported', imported),
+            _buildResultRow(Icons.skip_next, Colors.orange, 'Skipped', skipped),
+            if (errors > 0)
+              _buildResultRow(Icons.error, Colors.red, 'Errors', errors),
+            if (errorMessages.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              const Text('Details:',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 150),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: errorMessages
+                        .take(10)
+                        .map(
+                          (msg) => Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Text(msg,
+                                style: const TextStyle(
+                                    fontSize: 12, color: Colors.grey)),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+              ),
+              if (errorMessages.length > 10)
+                Text(
+                  '... and ${errorMessages.length - 10} more',
+                  style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                      fontStyle: FontStyle.italic),
+                ),
+            ],
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResultRow(IconData icon, Color color, String label, int count) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 8),
+          Text('$label: '),
+          Text('$count',
+              style: TextStyle(fontWeight: FontWeight.bold, color: color)),
+        ],
+      ),
+    );
+  }
+
+  void _showAddOptions() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.person_add),
+              title: const Text('Add Contact'),
+              subtitle: const Text('Manually enter a new contact'),
+              onTap: () {
+                Navigator.pop(context);
+                _addContact();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.upload_file),
+              title: const Text('Import from CSV'),
+              subtitle: const Text('Import contacts from a CSV file'),
+              onTap: () {
+                Navigator.pop(context);
+                _importCsvContacts();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -200,7 +497,7 @@ class _ContactsScreenState extends State<ContactsScreen>
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           if (_tabController.index == 0) {
-            _addContact();
+            _showAddOptions(); // Show options: Add Contact or Import CSV
           } else {
             _createGroup();
           }
