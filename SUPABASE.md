@@ -155,6 +155,186 @@ CREATE TABLE sms_gateway.api_keys (
 );
 ```
 
+### `sms_gateway.user_settings` (Settings Backup)
+```sql
+CREATE TABLE sms_gateway.user_settings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  tenant_id UUID NOT NULL REFERENCES sms_gateway.tenants(id) ON DELETE CASCADE,
+  
+  -- SMS Preferences
+  sms_channel TEXT DEFAULT 'thisPhone' CHECK (sms_channel IN ('thisPhone', 'quickSMS')),
+  api_queue_auto_start BOOLEAN DEFAULT false,
+  
+  -- UI Preferences
+  theme_mode TEXT DEFAULT 'light' CHECK (theme_mode IN ('light', 'dark', 'system')),
+  language TEXT DEFAULT 'en',
+  
+  -- Notification Preferences
+  notification_on_sms_sent BOOLEAN DEFAULT true,
+  notification_on_sms_failed BOOLEAN DEFAULT true,
+  notification_on_quota_warning BOOLEAN DEFAULT true,
+  
+  -- Additional settings (JSON for extensibility)
+  additional_settings JSONB DEFAULT '{}'::jsonb,
+  
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  synced_at TIMESTAMP WITH TIME ZONE,
+  
+  UNIQUE(user_id, tenant_id)
+);
+```
+
+### `sms_gateway.tenant_settings` (Settings Backup)
+```sql
+CREATE TABLE sms_gateway.tenant_settings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL UNIQUE REFERENCES sms_gateway.tenants(id) ON DELETE CASCADE,
+  
+  -- Default SMS Settings
+  default_sms_channel TEXT DEFAULT 'thisPhone' CHECK (default_sms_channel IN ('thisPhone', 'quickSMS')),
+  default_sms_sender_id TEXT,
+  
+  -- Quota Settings
+  daily_sms_quota INTEGER DEFAULT 10000,
+  monthly_sms_quota INTEGER DEFAULT 100000,
+  
+  -- Feature Flags
+  enable_bulk_sms BOOLEAN DEFAULT true,
+  enable_scheduled_sms BOOLEAN DEFAULT true,
+  enable_sms_groups BOOLEAN DEFAULT true,
+  enable_api_access BOOLEAN DEFAULT true,
+  
+  -- API Settings
+  api_webhook_url TEXT,
+  api_webhook_secret TEXT,
+  
+  -- Billing & Plan Info
+  plan_type TEXT DEFAULT 'basic' CHECK (plan_type IN ('basic', 'pro', 'enterprise')),
+  sms_cost_per_unit NUMERIC(10, 4) DEFAULT 0.05,
+  
+  -- Advanced Settings
+  advanced_settings JSONB DEFAULT '{}'::jsonb,
+  
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  synced_at TIMESTAMP WITH TIME ZONE,
+  
+  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  updated_by UUID REFERENCES auth.users(id) ON DELETE SET NULL
+);
+```
+
+### `sms_gateway.settings_sync_log` (Settings Backup Audit Trail)
+```sql
+CREATE TABLE sms_gateway.settings_sync_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  tenant_id UUID NOT NULL REFERENCES sms_gateway.tenants(id) ON DELETE CASCADE,
+  
+  sync_type TEXT NOT NULL CHECK (sync_type IN ('user_settings', 'tenant_settings', 'both')),
+  direction TEXT NOT NULL CHECK (direction IN ('local_to_remote', 'remote_to_local', 'bidirectional')),
+  
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'success', 'failed', 'partial')),
+  error_message TEXT,
+  
+  settings_count INTEGER DEFAULT 0,
+  synced_fields TEXT[], -- Array of field names that were synced
+  
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  completed_at TIMESTAMP WITH TIME ZONE
+);
+```
+
+---
+
+## ⚙️ Settings Backup System
+
+### Overview
+The settings backup system allows users to:
+- **Backup** their user preferences to Supabase (SMS channel, theme, language, notifications)
+- **Backup** tenant-wide settings (quotas, feature flags, plan type)
+- **Restore** settings on different devices for cross-device sync
+- **Track** all sync operations in audit trail
+
+### How It Works
+
+#### User Settings Backup Flow
+1. User clicks "Backup Settings to Supabase" in Settings screen
+2. `SettingsBackupService` reads local SharedPreferences
+3. Calls RPC function `update_user_settings()` 
+4. Creates entry in `settings_sync_log` with status='pending'
+5. If successful, marks log entry with status='success'
+6. If error, stores error message in log
+
+#### Tenant Settings Backup Flow
+1. Tenant admin clicks "Backup Settings to Supabase"
+2. `SettingsBackupService` reads tenant settings from SharedPreferences
+3. Upserts into `tenant_settings` table via REST API
+4. Creates audit log entry in `settings_sync_log`
+5. Marks as success/failed based on result
+
+#### Cross-Device Restore Flow
+1. User logs in on new device
+2. Clicks "Restore Settings from Supabase"
+3. `SettingsBackupService` calls `get_user_settings()` RPC
+4. Fetches from `user_settings` table
+5. Writes all values to local SharedPreferences
+6. Logs the restore operation
+7. All user preferences now match previous device
+
+### RPC Functions
+
+#### `get_user_settings(p_user_id, p_tenant_id)`
+Fetches user settings with RLS applied.
+```dart
+final response = await supabase.rpc('get_user_settings', params: {
+  'p_user_id': userId,
+  'p_tenant_id': tenantId,
+});
+```
+
+#### `update_user_settings(...)`
+Upserts user settings (insert if new, update if exists).
+```dart
+await supabase.rpc('update_user_settings', params: {
+  'p_user_id': userId,
+  'p_tenant_id': tenantId,
+  'p_sms_channel': 'thisPhone',
+  'p_api_queue_auto_start': true,
+  'p_theme_mode': 'dark',
+  'p_language': 'en',
+  // ... other settings
+});
+```
+
+#### `get_tenant_settings(p_tenant_id)`
+Fetches tenant settings.
+
+#### `log_settings_sync(...)`
+Creates sync log entry for audit trail.
+
+#### `complete_settings_sync(p_log_id, p_status)`
+Marks sync operation as completed.
+
+### RLS Policies for Settings Tables
+
+**User Settings:**
+- Users can only view their own settings
+- Users can only update their own settings
+- Tenant members can see settings for their tenant
+
+**Tenant Settings:**
+- Tenant members can view settings
+- Only admins/owners can update settings
+- Prevents regular members from changing workspace config
+
+**Sync Log:**
+- Users can view their own sync logs
+- Admins can view all sync logs for their tenant
+- Complete audit trail of all operations
+
 ---
 
 ## 🔐 Row Level Security (RLS)

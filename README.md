@@ -41,6 +41,12 @@ A multi-tenant SMS gateway application for bulk messaging with enterprise-grade 
 - **Tenant Isolation** - Data protected at database level
 - **API Key Authentication** - Secure external access (coming soon)
 
+### 🔄 Settings Backup
+- **Cross-Device Sync** - Backup settings to cloud, restore on another device
+- **User Settings** - Sync SMS channel, theme, language, notifications
+- **Tenant Settings** - Sync workspace quotas and feature flags
+- **Audit Trail** - Complete history of all backup/restore operations
+
 ### 🎨 User Experience
 - **Dark Mode** - Full dark theme support
 - **Modern UI** - Clean, intuitive interface
@@ -121,7 +127,145 @@ flutter run
 
 ---
 
-## 🏗️ Architecture
+## ⚙️ SMS Implementation Details
+
+### Native Android SMS Sending
+
+The app uses Android's native SMS sending capabilities via platform channels:
+
+**How It Works:**
+1. User selects "This Phone" as SMS channel in Settings
+2. Taps "Send SMS" with selected contacts
+3. Flutter calls Kotlin platform channel via MethodChannel
+4. Kotlin invokes SmsManager to send SMS via device SIM
+5. Delivery status logged to database
+
+**Service Architecture:**
+- **NativeSmsService** - Manages platform channel communication
+- **SmsService** - Routes to correct SMS delivery method (Native or API)
+- **ApiSmsQueueService** - Polls database for pending SMS requests
+
+**Android Implementation (`MainActivity.kt`):**
+```kotlin
+private val channel = "com.example.sms_gateway.sms"
+
+setupChannel(binaryMessenger) { call ->
+    when (call.method) {
+        "sendSms" -> {
+            val phoneNumber = call.argument<String>("phoneNumber")!!
+            val message = call.argument<String>("message")!!
+            sendSmsViaNative(phoneNumber, message)
+        }
+    }
+}
+
+private fun sendSmsViaNative(phoneNumber: String, message: String) {
+    val smsManager = SmsManager.getDefault()
+    smsManager.sendTextMessage(phoneNumber, null, message, null, null)
+}
+```
+
+**Flutter Implementation (`sms_service.dart`):**
+```dart
+Future<bool> sendViaNativeAndroid({
+    required String phoneNumber,
+    required String message,
+}) async {
+    try {
+        final result = await platform.invokeMethod<bool>('sendSms', {
+            'phoneNumber': phoneNumber,
+            'message': message,
+        });
+        return result ?? false;
+    } catch (e) {
+        debugPrint('Error sending native SMS: $e');
+        return false;
+    }
+}
+```
+
+### API Queue Processing
+
+The app can also send SMS via external APIs like QuickSMS:
+
+**Queue Flow:**
+1. External system calls API endpoint with SMS request
+2. Edge function creates record in `sms_requests` table with status='pending'
+3. Flutter app polls database every 30 seconds (ApiSmsQueueService)
+4. Service fetches pending requests
+5. Checks user's selected SMS channel (Native or QuickSMS)
+6. Routes to appropriate SMS service
+7. Updates request status: pending → processing → sent/failed
+
+**User's SMS Channel Choice:**
+The app respects the user's preference in Settings:
+- **"This Phone"** → Routes to native Android SMS via platform channel
+- **"QuickSMS API"** → Routes to QuickSMS HTTP API
+
+**Queue Service Code (`api_sms_queue_service.dart`):**
+```dart
+Future<void> _processSingleRequest(SmsRequest request) async {
+    try {
+        // Get user's selected SMS channel
+        final channel = await SmsService.getSelectedChannel();
+        
+        bool success;
+        if (channel == 'quickSMS') {
+            // Send via QuickSMS API
+            success = await SmsService.sendViaQuickSms(
+                phoneNumber: request.phoneNumber,
+                message: request.message,
+            );
+        } else {
+            // Send via Native Android SMS
+            success = await SmsService.sendViaNativeAndroid(
+                phoneNumber: request.phoneNumber,
+                message: request.message,
+            );
+        }
+        
+        // Update status in database
+        await _updateRequestStatus(
+            request.id,
+            success ? 'sent' : 'failed'
+        );
+    } catch (e) {
+        // Log error and mark as failed
+    }
+}
+```
+
+### Settings Backup During SMS Sending
+
+When users backup settings, the SMS channel preference is included:
+- If set to "This Phone", native SMS will be used
+- If set to "QuickSMS", API-based sending will be used
+- Backup restores this preference on different devices
+- Queue service respects the restored preference
+
+### Troubleshooting SMS Sending
+
+**SMS not sending despite being pending?**
+1. Check that user has selected an SMS channel in Settings
+2. Verify Settings → API Queue Settings has "Auto-start" enabled
+3. Check that app has SMS permissions in Android
+4. Verify phone number is valid
+5. Check Supabase database for error messages in sms_logs
+
+**Native SMS fails silently?**
+1. Ensure device has an active SIM card
+2. Check Android OS permissions (not granted = silent failure)
+3. Monitor logcat: `flutter logs`
+4. Check sms_logs table for status='failed' entries
+
+**API Queue not processing?**
+1. Go to Settings → API Integration
+2. Click "Start Processing" button manually
+3. Or enable "Auto-start Queue Processing" in Settings
+4. Verify API credentials are configured
+5. Check network connectivity
+
+---
 
 ```
 ┌─────────────────────────────────────────────┐
