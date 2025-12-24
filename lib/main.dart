@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'core/constants.dart';
 import 'core/theme.dart';
 import 'core/theme_provider.dart';
 import 'core/tenant_service.dart';
 import 'services/local_data_service.dart';
+import 'services/api_sms_queue_service.dart';
 import 'screens/contacts_screen.dart';
 import 'screens/bulk_sms_screen.dart';
 import 'screens/sms_logs_screen.dart';
@@ -485,6 +487,9 @@ class _HomePageState extends State<HomePage> {
             isLoading = false;
           });
         }
+
+        // Auto-start API SMS Queue if configured
+        _autoStartApiQueue();
       } else {
         if (mounted) {
           setState(() {
@@ -499,6 +504,24 @@ class _HomePageState extends State<HomePage> {
           isLoading = false;
         });
       }
+    }
+  }
+
+  /// Auto-start the API SMS Queue service if user has enabled it in settings
+  Future<void> _autoStartApiQueue() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final autoStart = prefs.getBool('api_queue_auto_start') ?? false;
+
+      if (autoStart) {
+        final queueService = ApiSmsQueueService();
+        if (!queueService.isEnabled) {
+          await queueService.start();
+          debugPrint('✅ Auto-started API SMS Queue Service');
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Error auto-starting API queue: $e');
     }
   }
 

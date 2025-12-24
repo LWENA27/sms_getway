@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../core/constants.dart';
 import '../sms/sms_log_model.dart';
+import '../api/native_sms_service.dart';
 
 class SmsService {
   static const String _channelKey = 'sms_channel';
@@ -96,7 +97,7 @@ class SmsService {
   }
 
   /// Send SMS using native Android SMS (requires device SIM)
-  /// This requires platform channels integration
+  /// This uses platform channels to invoke Android native SMS functionality
   static Future<bool> sendViaNativeAndroid({
     required String phoneNumber,
     required String message,
@@ -106,21 +107,52 @@ class SmsService {
     try {
       debugPrint('📱 Sending SMS via Native Android to: $phoneNumber');
 
-      // Note: Native Android SMS sending requires Android integration
-      // For now, we'll log it as pending and show a message to user
+      // Use the NativeSmsService to send SMS via Android platform channel
+      final success = await NativeSmsService.sendSms(
+        phoneNumber: phoneNumber,
+        message: message,
+      );
+
+      if (success) {
+        // Log successful SMS to database
+        await _logSmsToDatabase(
+          phoneNumber: phoneNumber,
+          message: message,
+          userId: userId,
+          tenantId: tenantId,
+          status: AppConstants.smsSent,
+          errorMessage: null,
+        );
+
+        debugPrint('✅ SMS sent successfully via Native Android');
+        return true;
+      } else {
+        // Log failed SMS to database
+        await _logSmsToDatabase(
+          phoneNumber: phoneNumber,
+          message: message,
+          userId: userId,
+          tenantId: tenantId,
+          status: AppConstants.smsFailed,
+          errorMessage: 'Native Android SMS sending failed',
+        );
+
+        debugPrint('❌ Failed to send SMS via Native Android');
+        return false;
+      }
+    } catch (e) {
+      debugPrint('❌ Native Android SMS Error: $e');
+
+      // Log error SMS to database
       await _logSmsToDatabase(
         phoneNumber: phoneNumber,
         message: message,
         userId: userId,
         tenantId: tenantId,
-        status: AppConstants.smsPending,
-        errorMessage: null,
+        status: AppConstants.smsFailed,
+        errorMessage: e.toString(),
       );
 
-      debugPrint('⏳ Native SMS sending not yet implemented');
-      return false;
-    } catch (e) {
-      debugPrint('❌ Native Android SMS Error: $e');
       return false;
     }
   }

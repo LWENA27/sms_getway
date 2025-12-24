@@ -238,13 +238,24 @@ class ApiSmsQueueService extends ChangeNotifier {
         return;
       }
 
-      // Send the SMS
-      final success = await SmsService.sendViaQuickSms(
-        phoneNumber: request.phoneNumber,
-        message: request.message,
-        userId: userId,
-        tenantId: request.tenantId,
-      );
+      // Check user's SMS channel preference
+      final selectedChannel = await SmsService.getSelectedChannel();
+      debugPrint('📱 Using SMS channel: $selectedChannel');
+
+      // Send the SMS using the selected channel
+      final success = selectedChannel == 'quickSMS'
+          ? await SmsService.sendViaQuickSms(
+              phoneNumber: request.phoneNumber,
+              message: request.message,
+              userId: userId,
+              tenantId: request.tenantId,
+            )
+          : await SmsService.sendViaNativeAndroid(
+              phoneNumber: request.phoneNumber,
+              message: request.message,
+              userId: userId,
+              tenantId: request.tenantId,
+            );
 
       if (success) {
         await _updateRequestStatus(request.id, 'sent');

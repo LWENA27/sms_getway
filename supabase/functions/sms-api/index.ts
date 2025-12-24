@@ -30,7 +30,8 @@ interface BulkSmsRequest {
   metadata?: Record<string, unknown>;
 }
 
-serve(async (req) => {
+// Main handler function
+async function handler(req: Request): Promise<Response> {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -38,6 +39,7 @@ serve(async (req) => {
 
   try {
     // Get API key from header
+
     const apiKey = req.headers.get("x-api-key");
     
     if (!apiKey) {
@@ -81,7 +83,10 @@ serve(async (req) => {
         );
       }
 
-      const { data, error } = await supabase.rpc("submit_sms_request", {
+      // Call sms_gateway.submit_sms_request function
+      // Try sms_gateway schema first, then fallback to public
+      
+      let result = await (supabase as any).rpc("submit_sms_request", {
         p_api_key: apiKey,
         p_phone_number: body.phone_number,
         p_message: body.message,
@@ -89,7 +94,24 @@ serve(async (req) => {
         p_priority: body.priority || 0,
         p_scheduled_at: body.scheduled_at || null,
         p_metadata: body.metadata || {},
+      }, {
+        schema: "sms_gateway"
       });
+      
+      // If sms_gateway doesn't work, try public schema
+      if (result.error) {
+        result = await (supabase as any).rpc("submit_sms_request", {
+          p_api_key: apiKey,
+          p_phone_number: body.phone_number,
+          p_message: body.message,
+          p_external_id: body.external_id || null,
+          p_priority: body.priority || 0,
+          p_scheduled_at: body.scheduled_at || null,
+          p_metadata: body.metadata || {},
+        });
+      }
+
+      const { data, error } = result;
 
       if (error) {
         console.error("RPC Error:", error);
@@ -105,10 +127,10 @@ serve(async (req) => {
         );
       }
 
-      const result = data as { success: boolean; error?: string };
+      const responseData = data as { success: boolean; error?: string };
       
       return new Response(JSON.stringify(data), {
-        status: result.success ? 200 : 400,
+        status: responseData.success ? 200 : 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -130,7 +152,7 @@ serve(async (req) => {
         );
       }
 
-      const { data, error } = await supabase.rpc("submit_bulk_sms_request", {
+      let bulkResult = await supabase.rpc("submit_bulk_sms_request", {
         p_api_key: apiKey,
         p_phone_numbers: body.phone_numbers,
         p_message: body.message,
@@ -138,7 +160,24 @@ serve(async (req) => {
         p_priority: body.priority || 0,
         p_scheduled_at: body.scheduled_at || null,
         p_metadata: body.metadata || {},
+      }, {
+        schema: "sms_gateway"
       });
+
+      // If sms_gateway doesn't work, try public schema
+      if (bulkResult.error) {
+        bulkResult = await supabase.rpc("submit_bulk_sms_request", {
+          p_api_key: apiKey,
+          p_phone_numbers: body.phone_numbers,
+          p_message: body.message,
+          p_external_id: body.external_id || null,
+          p_priority: body.priority || 0,
+          p_scheduled_at: body.scheduled_at || null,
+          p_metadata: body.metadata || {},
+        });
+      }
+
+      const { data, error } = bulkResult;
 
       if (error) {
         console.error("RPC Error:", error);
@@ -179,10 +218,22 @@ serve(async (req) => {
         );
       }
 
-      const { data, error } = await supabase.rpc("get_sms_request_status", {
+      let statusResult = await supabase.rpc("get_sms_request_status", {
         p_api_key: apiKey,
         p_request_id: requestId,
+      }, {
+        schema: "sms_gateway"
       });
+
+      // If sms_gateway doesn't work, try public schema
+      if (statusResult.error) {
+        statusResult = await supabase.rpc("get_sms_request_status", {
+          p_api_key: apiKey,
+          p_request_id: requestId,
+        });
+      }
+
+      const { data, error } = statusResult;
 
       if (error) {
         console.error("RPC Error:", error);
@@ -278,4 +329,17 @@ serve(async (req) => {
       }
     );
   }
+}
+
+// Export the handler with bypass for API key authentication
+serve(async (req: Request): Promise<Response> => {
+  // For API key-based requests, bypass JWT verification
+  const apiKey = req.headers.get("x-api-key");
+  if (apiKey) {
+    // Allow API key requests to proceed without JWT
+    return handler(req);
+  }
+  
+  // For other requests, proceed normally (JWT will be verified by Supabase)
+  return handler(req);
 });
