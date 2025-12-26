@@ -7,6 +7,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../database/app_database.dart';
 import '../core/tenant_service.dart';
@@ -533,20 +534,47 @@ class SyncService extends ChangeNotifier {
   }
 
   /// Pull data for initial load (when switching tenants)
+  /// ✅ OPTIMIZED: Pull initial data with smart caching
   Future<void> pullInitialData(String tenantId) async {
     if (!_isOnline) {
       debugPrint('📡 Offline - using cached data');
       return;
     }
 
+    // ✅ Check if data was recently pulled (within last 5 minutes)
+    final prefs = await SharedPreferences.getInstance();
+    final lastPullKey = 'last_pull_$tenantId';
+    final lastPullStr = prefs.getString(lastPullKey);
+
+    if (lastPullStr != null) {
+      final lastPull = DateTime.parse(lastPullStr);
+      final timeSinceLastPull = DateTime.now().difference(lastPull);
+
+      if (timeSinceLastPull.inMinutes < 5) {
+        debugPrint(
+            '⚡ Using cached data (pulled ${timeSinceLastPull.inMinutes}m ago)');
+        _status = OverallSyncStatus.success;
+        notifyListeners();
+        return;
+      }
+    }
+
     _status = OverallSyncStatus.syncing;
     notifyListeners();
 
     try {
-      await _pullContacts(tenantId);
-      await _pullGroups(tenantId);
+      // Pull data in parallel for faster loading
+      await Future.wait([
+        _pullContacts(tenantId),
+        _pullGroups(tenantId),
+        _pullSmsLogs(tenantId),
+      ]);
+
+      // Pull group members after groups (dependency)
       await _pullGroupMembers(tenantId);
-      await _pullSmsLogs(tenantId);
+
+      // Save last pull timestamp
+      await prefs.setString(lastPullKey, DateTime.now().toIso8601String());
 
       _status = OverallSyncStatus.success;
       debugPrint('✅ Initial data pull complete');

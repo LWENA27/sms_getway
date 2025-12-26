@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'core/constants.dart';
 import 'core/theme.dart';
 import 'core/theme_provider.dart';
 import 'core/tenant_service.dart';
 import 'services/local_data_service.dart';
+import 'services/api_sms_queue_service.dart';
 import 'screens/contacts_screen.dart';
 import 'screens/bulk_sms_screen.dart';
 import 'screens/sms_logs_screen.dart';
@@ -135,18 +137,68 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Widget build(BuildContext context) {
     final session = Supabase.instance.client.auth.currentSession;
 
-    // Show loading while checking tenant
+    // ✅ IMPROVED: Show branded loading screen while checking tenant
     if (_isCheckingTenant) {
       return Scaffold(
+        backgroundColor: AppTheme.primaryColor,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const CircularProgressIndicator(),
+              // App Logo/Icon
+              Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 20,
+                      spreadRadius: 5,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.sms,
+                  size: 60,
+                  color: AppTheme.primaryColor,
+                ),
+              ),
+              const SizedBox(height: 32),
+              const Text(
+                'SMS Gateway Pro',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Professional Bulk SMS Management',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 48),
+              const SizedBox(
+                width: 40,
+                height: 40,
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
               const SizedBox(height: 16),
-              Text(
+              const Text(
                 'Loading workspace...',
-                style: Theme.of(context).textTheme.bodyMedium,
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                ),
               ),
             ],
           ),
@@ -471,20 +523,23 @@ class _HomePageState extends State<HomePage> {
           currentTenantName = tenantService.tenantName;
         });
 
-        // Pull initial data from Supabase to local DB
-        await LocalDataService().loadTenantData(tenantId);
-
-        // Load counts from local database (offline-first)
-        final counts = await LocalDataService().getDashboardCounts();
+        // ✅ OPTIMIZATION 1: Load local data FIRST (instant UI update)
+        final localCounts = await LocalDataService().getDashboardCounts();
 
         if (mounted) {
           setState(() {
-            contactCount = counts['contacts'] ?? 0;
-            groupCount = counts['groups'] ?? 0;
-            smsLogCount = counts['smsLogs'] ?? 0;
-            isLoading = false;
+            contactCount = localCounts['contacts'] ?? 0;
+            groupCount = localCounts['groups'] ?? 0;
+            smsLogCount = localCounts['smsLogs'] ?? 0;
+            isLoading = false; // ✅ Show UI immediately with cached data
           });
         }
+
+        // ✅ OPTIMIZATION 2: Sync in background (non-blocking)
+        _syncDataInBackground(tenantId);
+
+        // Auto-start API SMS Queue if configured
+        _autoStartApiQueue();
       } else {
         if (mounted) {
           setState(() {
@@ -499,6 +554,50 @@ class _HomePageState extends State<HomePage> {
           isLoading = false;
         });
       }
+    }
+  }
+
+  /// ✅ NEW: Background sync - updates UI when complete
+  Future<void> _syncDataInBackground(String tenantId) async {
+    try {
+      debugPrint('🔄 Starting background data sync...');
+
+      // Pull latest data from Supabase (non-blocking)
+      await LocalDataService().loadTenantData(tenantId);
+
+      // Refresh counts after sync
+      final updatedCounts = await LocalDataService().getDashboardCounts();
+
+      if (mounted) {
+        setState(() {
+          contactCount = updatedCounts['contacts'] ?? 0;
+          groupCount = updatedCounts['groups'] ?? 0;
+          smsLogCount = updatedCounts['smsLogs'] ?? 0;
+        });
+      }
+
+      debugPrint('✅ Background sync complete');
+    } catch (e) {
+      debugPrint('⚠️ Background sync failed: $e');
+      // Don't show error - app already has local data
+    }
+  }
+
+  /// Auto-start the API SMS Queue service if user has enabled it in settings
+  Future<void> _autoStartApiQueue() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final autoStart = prefs.getBool('api_queue_auto_start') ?? false;
+
+      if (autoStart) {
+        final queueService = ApiSmsQueueService();
+        if (!queueService.isEnabled) {
+          await queueService.start();
+          debugPrint('✅ Auto-started API SMS Queue Service');
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Error auto-starting API queue: $e');
     }
   }
 
@@ -563,7 +662,20 @@ class _HomePageState extends State<HomePage> {
           )
         : RefreshIndicator(
             onRefresh: () async {
-              _loadData();
+              // ✅ Force fresh sync from Supabase on pull-to-refresh
+              setState(() => isLoading = true);
+
+              final tenantId = TenantService().tenantId;
+              if (tenantId != null) {
+                // Clear cache timestamp to force fresh pull
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.remove('last_pull_$tenantId');
+
+                // Reload data
+                _loadData();
+              }
+
+              setState(() => isLoading = false);
             },
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(AppTheme.paddingLarge),

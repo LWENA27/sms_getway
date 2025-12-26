@@ -23,12 +23,13 @@ A **distributed, SIM-based messaging platform** that allows organizations to sen
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  PHASE 1: Local SMS Gateway                         ✅ COMPLETE         │
 ├─────────────────────────────────────────────────────────────────────────┤
-│  PHASE 2: Connected & API-Enabled Gateway           🔄 IN PROGRESS      │
+│  PHASE 2: Connected & API-Enabled Gateway           ✅ MOSTLY COMPLETE  │
 │  ├── 2.1 Organization & Authentication              ✅ COMPLETE         │
-│  ├── 2.2 Backend & Sync Layer                       🔲 Next Up          │
-│  ├── 2.3 API-Triggered SMS                          🔲 Planned          │
-│  ├── 2.4 API Security & Control                     🔲 Planned          │
-│  └── 2.5 Provider / Sender ID Integration           🔲 Planned          │
+│  ├── 2.2 Backend & Sync Layer                       ✅ COMPLETE         │
+│  ├── 2.3 API-Triggered SMS                          ✅ IMPLEMENTED       │
+│  ├── 2.4 API Security & Control                     ✅ IMPLEMENTED       │
+│  ├── 2.5 Provider / Sender ID Integration           🔲 Next             │
+│  └── 2.6 Settings Backup & Cross-Device Sync        ✅ COMPLETE         │
 ├─────────────────────────────────────────────────────────────────────────┤
 │  PHASE 3: Scale & Enterprise Features               📋 PLANNED          │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -72,11 +73,7 @@ User → App UI → Android SmsManager → Phone SIM → Recipient
 
 ---
 
-## 🔄 Phase 2: Connected & API-Enabled Gateway (IN PROGRESS)
-
-**Goal:** Enable organizations to send SMS via UI or external systems, sync logs online, and prepare for Sender ID integration.
-
----
+## ✅ Phase 2: Connected & API-Enabled Gateway (MOSTLY COMPLETE)
 
 ### 🔸 Phase 2.1 – Organization & Authentication ✅ COMPLETE
 
@@ -216,7 +213,60 @@ Content-Type: application/json
 
 ---
 
-## 📋 Phase 3: Scale & Enterprise Features (PLANNED)
+### � Phase 2.6 – Settings Backup & Cross-Device Sync ✅ COMPLETE
+
+**Objective:** Allow users to backup their settings to Supabase and restore on different devices.
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| User Settings Backup | ✅ | SMS channel, theme, language, notifications |
+| Tenant Settings Backup | ✅ | Workspace quotas and feature flags |
+| Cross-Device Restore | ✅ | Sync preferences across devices |
+| Audit Trail | ✅ | Track all backup/restore operations |
+| RLS Security | ✅ | User & tenant data isolation |
+| UI Integration | ✅ | Backup/restore buttons in Settings |
+
+**Implementation Details:**
+
+Settings backed up include:
+- **User Level**: SMS channel (Native/QuickSMS), auto-start queue, theme mode, language, notification preferences
+- **Tenant Level**: Default SMS channel, daily/monthly quotas, feature flags (bulk, scheduled, groups, API), plan type
+
+**Service Architecture:**
+```
+SettingsBackupService (Singleton)
+├── backupUserSettings() → SharedPreferences → RPC → user_settings table
+├── restoreUserSettings() → RPC → user_settings table → SharedPreferences
+├── backupTenantSettings() → SharedPreferences → REST → tenant_settings table
+└── restoreTenantSettings() → REST → tenant_settings table → SharedPreferences
+```
+
+**Database Tables:**
+- `user_settings` - Per-user preferences with unique(user_id, tenant_id)
+- `tenant_settings` - Workspace configuration unique per tenant
+- `settings_sync_log` - Audit trail of all sync operations
+
+**RLS Policies:**
+- Users can only view/update their own settings
+- Tenant admins can update workspace settings
+- All operations logged for audit trail
+
+**User Flow:**
+```
+Device A:
+1. Configure SMS settings
+2. Go to Settings → Backup Settings to Supabase
+3. ✅ Settings saved to cloud
+
+Device B:
+1. Login with same account
+2. Go to Settings → Restore Settings from Supabase
+3. ✅ Settings match Device A automatically
+```
+
+📌 **Status:** Completed December 24, 2025
+
+---
 
 **Goal:** Enterprise-grade features for large organizations.
 

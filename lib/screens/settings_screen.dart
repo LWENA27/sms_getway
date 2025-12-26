@@ -8,6 +8,7 @@ import '../core/tenant_service.dart';
 import '../services/local_data_service.dart';
 import '../services/sync_service.dart';
 import '../services/api_sms_queue_service.dart';
+import '../services/settings_backup_service.dart';
 import '../main.dart';
 import 'profile_screen.dart';
 import 'tenant_selector_screen.dart';
@@ -27,6 +28,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? userEmail;
   String? userId;
   SmsChannel selectedChannel = SmsChannel.thisPhone;
+  bool autoStartApiQueue = false;
   final TenantService _tenantService = TenantService();
 
   @override
@@ -34,6 +36,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     _loadUserInfo();
     _loadChannelPreference();
+    _loadAutoStartPreference();
   }
 
   void _loadUserInfo() {
@@ -61,6 +64,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  void _loadAutoStartPreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getBool('api_queue_auto_start') ?? false;
+      setState(() {
+        autoStartApiQueue = saved;
+      });
+      debugPrint('✅ Loaded API queue auto-start: $saved');
+    } catch (e) {
+      debugPrint('❌ Error loading auto-start preference: $e');
+    }
+  }
+
   void _saveChannelPreference(SmsChannel channel) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -83,6 +99,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       }
       debugPrint('❌ Error saving channel preference: $e');
+    }
+  }
+
+  void _saveAutoStartPreference(bool value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('api_queue_auto_start', value);
+      setState(() {
+        autoStartApiQueue = value;
+      });
+      debugPrint('✅ Saved API queue auto-start: $value');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              value
+                  ? 'Auto-start enabled - Queue will start on app launch'
+                  : 'Auto-start disabled - Start processing manually when needed',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error saving preference: $e')),
+        );
+      }
+      debugPrint('❌ Error saving auto-start preference: $e');
     }
   }
 
@@ -314,7 +359,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: _showChannelDialog,
           ),
 
-          // API Settings
+          // API Settings Section
+          const Divider(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Text(
+              'API & Queue Settings',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: Theme.of(context).primaryColor,
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+          ),
+
+          // API Integration
           ListenableBuilder(
             listenable: ApiSmsQueueService(),
             builder: (context, _) {
@@ -364,7 +422,61 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
             },
           ),
-          const Divider(),
+
+          // Auto-start API Queue
+          ListTile(
+            leading: const Icon(Icons.schedule),
+            title: const Text('Auto-start Queue Processing'),
+            subtitle:
+                const Text('Automatically process SMS requests on app launch'),
+            trailing: Switch(
+              value: autoStartApiQueue,
+              onChanged: _saveAutoStartPreference,
+            ),
+          ),
+
+          // Queue Processing Status
+          ListenableBuilder(
+            listenable: ApiSmsQueueService(),
+            builder: (context, _) {
+              final apiService = ApiSmsQueueService();
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: apiService.isEnabled
+                      ? Colors.green.withOpacity(0.1)
+                      : Colors.grey.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: apiService.isEnabled ? Colors.green : Colors.grey,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      apiService.isEnabled ? Icons.check_circle : Icons.info,
+                      color: apiService.isEnabled ? Colors.green : Colors.grey,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        apiService.isEnabled
+                            ? 'Queue is active and processing'
+                            : 'Queue is inactive - tap "API Integration" to manage',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color:
+                              apiService.isEnabled ? Colors.green : Colors.grey,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
 
           // Sync Section
           ListenableBuilder(
@@ -437,6 +549,181 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       }
                       return const SizedBox.shrink();
                     },
+                  ),
+                ],
+              );
+            },
+          ),
+          const Divider(),
+
+          // Settings Backup Section
+          ListenableBuilder(
+            listenable: SettingsBackupService(),
+            builder: (context, _) {
+              final backupService = SettingsBackupService();
+              final isLoading = backupService.isSyncing;
+
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                    child: Text(
+                      'Settings Backup',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                            color: Theme.of(context).primaryColor,
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                  ),
+
+                  // Backup to Supabase Button
+                  ListTile(
+                    leading: isLoading
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.cloud_upload),
+                    title: const Text('Backup Settings to Supabase'),
+                    subtitle: Text(
+                      backupService.lastSyncStatus ??
+                          'Save your settings to the cloud',
+                    ),
+                    trailing:
+                        !isLoading ? const Icon(Icons.chevron_right) : null,
+                    onTap: isLoading
+                        ? null
+                        : () async {
+                            if (userId == null) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('User not authenticated'),
+                                  ),
+                                );
+                              }
+                              return;
+                            }
+
+                            final tenantId = _tenantService.tenantId;
+                            if (tenantId == null) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('No tenant selected'),
+                                  ),
+                                );
+                              }
+                              return;
+                            }
+
+                            setState(() {});
+                            final success =
+                                await backupService.backupAllSettings(
+                              userId: userId!,
+                              tenantId: tenantId,
+                            );
+
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    success
+                                        ? '✅ Settings backed up successfully'
+                                        : '❌ Error backing up settings',
+                                  ),
+                                  backgroundColor:
+                                      success ? Colors.green : Colors.red,
+                                ),
+                              );
+                            }
+                          },
+                  ),
+
+                  // Restore from Supabase Button
+                  ListTile(
+                    leading: const Icon(Icons.cloud_download),
+                    title: const Text('Restore Settings from Supabase'),
+                    subtitle: Text(
+                      'Last synced: ${backupService.getSyncStatusMessage()}',
+                    ),
+                    trailing:
+                        !isLoading ? const Icon(Icons.chevron_right) : null,
+                    onTap: isLoading
+                        ? null
+                        : () async {
+                            if (userId == null) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('User not authenticated'),
+                                  ),
+                                );
+                              }
+                              return;
+                            }
+
+                            final tenantId = _tenantService.tenantId;
+                            if (tenantId == null) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('No tenant selected'),
+                                  ),
+                                );
+                              }
+                              return;
+                            }
+
+                            setState(() {});
+                            final success =
+                                await backupService.restoreAllSettings(
+                              userId: userId!,
+                              tenantId: tenantId,
+                            );
+
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    success
+                                        ? '✅ Settings restored successfully'
+                                        : '❌ Error restoring settings',
+                                  ),
+                                  backgroundColor:
+                                      success ? Colors.green : Colors.red,
+                                ),
+                              );
+                            }
+                          },
+                  ),
+
+                  // Sync Status
+                  Container(
+                    margin:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info, color: Colors.blue, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Settings are stored locally and backed up to Supabase for cross-device sync',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.blue.shade700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               );

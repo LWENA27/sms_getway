@@ -313,3 +313,91 @@ Future versions will support webhook callbacks for delivery notifications.
 ## Support
 
 For support, please contact your SMS Gateway administrator.
+
+---
+
+## 🏗️ Implementation Architecture
+
+### Service Layer Overview
+
+**NativeSmsService** → **SmsService** → **ApiSmsQueueService**
+
+Three-layered architecture for SMS delivery:
+
+1. **NativeSmsService**: Platform channel to Android SMS
+2. **SmsService**: Routes based on user's SMS channel preference
+3. **ApiSmsQueueService**: Background processor polling database
+
+### Channel Selection
+
+Users can choose SMS delivery method in Settings:
+
+- **"This Phone"** (Default) → Native Android SMS via device SIM
+- **"QuickSMS API"** → HTTP API to QuickSMS provider
+
+The queue respects this preference:
+```
+Check user setting → Route to correct service → Update status
+```
+
+### Settings Backup Integration
+
+User's SMS channel preference is **backed up to Supabase** via Settings Backup feature:
+
+```
+Device A:
+  Settings → SMS Channel = "This Phone" → Backup to Supabase
+  
+Device B:
+  Login → Restore from Supabase → SMS Channel = "This Phone"
+  → Queue automatically uses restored preference
+```
+
+### Database Schema
+
+**sms_requests table:**
+- status: pending → processing → sent/failed
+- phone_number, message, priority, scheduled_at
+- metadata for external references
+
+**sms_logs table:**
+- Audit trail of all SMS attempts
+- Tracks delivery method used (native/API)
+- Stores success/failure reason
+
+### Complete Flow
+
+```
+External API
+     ↓
+POST /sms-api/send
+     ↓
+Validate API key
+     ↓
+Insert into sms_requests (status=pending)
+     ↓
+Flutter App (ApiSmsQueueService)
+     ↓
+Poll every 30 seconds
+     ↓
+Fetch pending requests
+     ↓
+Get user's SMS channel from SharedPreferences
+(or restored from Settings Backup)
+     ↓
+    ┌────────────────┐
+    ↓                ↓
+"This Phone"    "QuickSMS API"
+    ↓                ↓
+NativeSms       HTTP POST
+    ↓                ↓
+  SIM           QuickSMS
+    ↓                ↓
+Update sms_requests (status=sent/failed)
+     ↓
+Log to sms_logs
+     ↓
+SMS Delivered!
+```
+
+---
