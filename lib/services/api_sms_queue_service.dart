@@ -132,9 +132,13 @@ class ApiSmsQueueService extends ChangeNotifier {
 
   /// Start the queue processing service
   Future<void> start() async {
-    if (_isEnabled) return;
+    if (_isEnabled) {
+      debugPrint('⚠️ API SMS Queue Service already running');
+      return;
+    }
 
     debugPrint('🚀 Starting API SMS Queue Service...');
+    debugPrint('📊 Current tenant: ${TenantService().tenantId}');
     _isEnabled = true;
 
     // Initial fetch of pending count
@@ -142,14 +146,16 @@ class ApiSmsQueueService extends ChangeNotifier {
 
     // Start polling every 30 seconds
     _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      debugPrint('⏰ Timer fired - checking queue...');
       _processQueue();
     });
 
     // Process immediately
+    debugPrint('🔄 Processing queue immediately...');
     await _processQueue();
 
     notifyListeners();
-    debugPrint('✅ API SMS Queue Service started');
+    debugPrint('✅ API SMS Queue Service started - polling every 30s');
   }
 
   /// Stop the queue processing service
@@ -179,18 +185,18 @@ class ApiSmsQueueService extends ChangeNotifier {
     if (!_isEnabled) return;
 
     final tenantId = TenantService().tenantId;
-    if (tenantId == null) return;
+    debugPrint('🔍 Checking queue for tenant: $tenantId');
 
     _isProcessing = true;
     notifyListeners();
 
     try {
       // Fetch pending requests (prioritized, scheduled ones ready)
+      // Note: Querying all pending requests regardless of tenant
       final response = await _supabase
           .schema('sms_gateway')
           .from('sms_requests')
           .select()
-          .eq('tenant_id', tenantId)
           .eq('status', 'pending')
           .or('scheduled_at.is.null,scheduled_at.lte.${DateTime.now().toIso8601String()}')
           .order('priority', ascending: false)
@@ -202,14 +208,17 @@ class ApiSmsQueueService extends ChangeNotifier {
           .toList();
 
       if (requests.isEmpty) {
-        debugPrint('📭 No pending SMS requests in queue');
+        debugPrint('📭 No pending SMS requests in queue (tenant: $tenantId)');
         _isProcessing = false;
         await _refreshPendingCount();
         notifyListeners();
         return;
       }
 
-      debugPrint('📬 Processing ${requests.length} SMS requests...');
+      debugPrint(
+          '📬 Processing ${requests.length} SMS requests (found ${requests.map((r) => r.tenantId).toSet().length} unique tenants)...');
+      debugPrint(
+          '🔍 Request tenant IDs: ${requests.map((r) => r.tenantId).toSet()}');
 
       for (final request in requests) {
         await _processSingleRequest(request);
@@ -263,8 +272,9 @@ class ApiSmsQueueService extends ChangeNotifier {
         _lastProcessedAt = DateTime.now();
         debugPrint('✅ SMS sent to ${request.phoneNumber}');
       } else {
+        // Mark as failed so it appears in logs but user can see what went wrong
         await _updateRequestStatus(request.id, 'failed',
-            errorMessage: 'Failed to send SMS');
+            errorMessage: 'Failed to send SMS - check permissions and retry manually');
         debugPrint('❌ Failed to send SMS to ${request.phoneNumber}');
       }
     } catch (e) {
@@ -305,19 +315,16 @@ class ApiSmsQueueService extends ChangeNotifier {
   Future<void> _refreshPendingCount() async {
     try {
       final tenantId = TenantService().tenantId;
-      if (tenantId == null) {
-        _pendingCount = 0;
-        return;
-      }
 
+      // Count all pending requests (not filtered by tenant)
       final response = await _supabase
           .schema('sms_gateway')
           .from('sms_requests')
           .select('id')
-          .eq('tenant_id', tenantId)
           .eq('status', 'pending');
 
       _pendingCount = (response as List).length;
+      debugPrint('📊 Pending SMS requests: $_pendingCount (tenant: $tenantId)');
       notifyListeners();
     } catch (e) {
       debugPrint('❌ Error refreshing pending count: $e');
