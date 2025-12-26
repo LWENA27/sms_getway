@@ -66,7 +66,7 @@ class SettingsBackupService extends ChangeNotifier {
       );
 
       // Call Supabase RPC function to update user settings
-      await _supabase.rpc(
+      await _supabase.schema('sms_gateway').rpc(
         'update_user_settings',
         params: {
           'p_user_id': userId,
@@ -125,7 +125,7 @@ class SettingsBackupService extends ChangeNotifier {
       );
 
       // Get user settings from Supabase
-      final response = await _supabase.rpc(
+      final response = await _supabase.schema('sms_gateway').rpc(
         'get_user_settings',
         params: {
           'p_user_id': userId,
@@ -402,7 +402,7 @@ class SettingsBackupService extends ChangeNotifier {
     required String direction,
   }) async {
     try {
-      final response = await _supabase.rpc(
+      final response = await _supabase.schema('sms_gateway').rpc(
         'log_settings_sync',
         params: {
           'p_user_id': userId,
@@ -429,7 +429,7 @@ class SettingsBackupService extends ChangeNotifier {
     try {
       if (logId.isEmpty) return;
 
-      await _supabase.rpc(
+      await _supabase.schema('sms_gateway').rpc(
         'complete_settings_sync',
         params: {
           'p_log_id': logId,

@@ -99,11 +99,778 @@ flutter run
 
 ---
 
+## 🔐 User Registration & Authentication
+
+### For Developers: Adding Registration Form
+
+This section provides complete instructions for developers implementing user registration on a website to enable users to sign up and access SMS Gateway Pro service.
+
+#### **Overview**
+
+SMS Gateway Pro uses **Supabase Authentication** with a multi-tenant architecture. Users can register via a web form, and their account will be automatically linked to a tenant workspace.
+
+#### **Registration Flow**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                  REGISTRATION FLOW                       │
+└─────────────────────────────────────────────────────────┘
+
+1. User fills registration form (email, password, name, phone)
+                        ↓
+2. Call Supabase Auth API to create user account
+                        ↓
+3. User record created in auth.users table
+                        ↓
+4. Create tenant record in sms_gateway_tenants table
+                        ↓
+5. Link user to tenant in tenant_members table
+                        ↓
+6. Create user profile in sms_gateway.users table
+                        ↓
+7. Send confirmation email (if enabled)
+                        ↓
+8. User can login to mobile app or web portal
+```
+
+#### **Step 1: Set Up Supabase Client**
+
+First, install Supabase JavaScript client:
+
+```bash
+npm install @supabase/supabase-js
+# or
+yarn add @supabase/supabase-js
+```
+
+Create Supabase client configuration:
+
+```javascript
+// supabaseClient.js
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = 'https://kzjgdeqfmxkmpmadtbpb.supabase.co'
+const supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY' // Get from Supabase Dashboard
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+```
+
+**⚠️ Important:** Get your `SUPABASE_ANON_KEY` from:
+- Supabase Dashboard → Project Settings → API → `anon` `public` key
+
+#### **Step 2: Create Registration Form (HTML)**
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMS Gateway Pro - Register</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .register-container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            max-width: 450px;
+            width: 100%;
+        }
+        h2 {
+            color: #333;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        .subtitle {
+            color: #666;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+            font-weight: 500;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+            box-sizing: border-box;
+        }
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .error-message {
+            background: #fee;
+            color: #c33;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .success-message {
+            background: #efe;
+            color: #3c3;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .login-link {
+            text-align: center;
+            margin-top: 20px;
+            color: #666;
+            font-size: 14px;
+        }
+        .login-link a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="register-container">
+        <h2>📱 SMS Gateway Pro</h2>
+        <p class="subtitle">Create your account to start sending bulk SMS</p>
+        
+        <div id="errorMessage" class="error-message"></div>
+        <div id="successMessage" class="success-message"></div>
+        
+        <form id="registerForm">
+            <div class="form-group">
+                <label for="name">Full Name *</label>
+                <input type="text" id="name" name="name" required 
+                       placeholder="Enter your full name">
+            </div>
+            
+            <div class="form-group">
+                <label for="email">Email Address *</label>
+                <input type="email" id="email" name="email" required 
+                       placeholder="your.email@example.com">
+            </div>
+            
+            <div class="form-group">
+                <label for="phone">Phone Number *</label>
+                <input type="tel" id="phone" name="phone" required 
+                       placeholder="+1234567890">
+            </div>
+            
+            <div class="form-group">
+                <label for="companyName">Company/Organization Name *</label>
+                <input type="text" id="companyName" name="companyName" required 
+                       placeholder="Your company name">
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Password *</label>
+                <input type="password" id="password" name="password" required 
+                       placeholder="Minimum 6 characters">
+            </div>
+            
+            <div class="form-group">
+                <label for="confirmPassword">Confirm Password *</label>
+                <input type="password" id="confirmPassword" name="confirmPassword" required 
+                       placeholder="Re-enter your password">
+            </div>
+            
+            <button type="submit" id="submitBtn">Create Account</button>
+        </form>
+        
+        <div class="login-link">
+            Already have an account? <a href="login.html">Sign in</a>
+        </div>
+    </div>
+
+    <script type="module" src="register.js"></script>
+</body>
+</html>
+```
+
+#### **Step 3: Implement Registration Logic (JavaScript)**
+
+```javascript
+// register.js
+import { supabase } from './supabaseClient.js'
+
+// Get form elements
+const form = document.getElementById('registerForm')
+const submitBtn = document.getElementById('submitBtn')
+const errorMessage = document.getElementById('errorMessage')
+const successMessage = document.getElementById('successMessage')
+
+// Helper functions
+function showError(message) {
+    errorMessage.textContent = message
+    errorMessage.style.display = 'block'
+    successMessage.style.display = 'none'
+}
+
+function showSuccess(message) {
+    successMessage.textContent = message
+    successMessage.style.display = 'block'
+    errorMessage.style.display = 'none'
+}
+
+function hideMessages() {
+    errorMessage.style.display = 'none'
+    successMessage.style.display = 'none'
+}
+
+// Validate phone number format
+function validatePhone(phone) {
+    const phoneRegex = /^\+?[1-9]\d{1,14}$/
+    return phoneRegex.test(phone.replace(/[\s-]/g, ''))
+}
+
+// Generate tenant slug from company name
+function generateSlug(companyName) {
+    return companyName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+}
+
+// Main registration function
+async function registerUser(userData) {
+    try {
+        // Step 1: Create auth user
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+            email: userData.email,
+            password: userData.password,
+            options: {
+                data: {
+                    full_name: userData.name,
+                    phone: userData.phone
+                }
+            }
+        })
+
+        if (authError) throw authError
+        if (!authData.user) throw new Error('User creation failed')
+
+        const userId = authData.user.id
+
+        // Step 2: Create tenant (organization/workspace)
+        const tenantSlug = generateSlug(userData.companyName)
+        const { data: tenantData, error: tenantError } = await supabase
+            .from('sms_gateway_tenants')
+            .insert([
+                {
+                    name: userData.companyName,
+                    slug: tenantSlug,
+                    status: 'active'
+                }
+            ])
+            .select()
+            .single()
+
+        if (tenantError) throw tenantError
+        const tenantId = tenantData.id
+
+        // Step 3: Link user to tenant as owner
+        const { error: memberError } = await supabase
+            .from('tenant_members')
+            .insert([
+                {
+                    tenant_id: tenantId,
+                    user_id: userId,
+                    role: 'owner'
+                }
+            ])
+
+        if (memberError) throw memberError
+
+        // Step 4: Create user profile in SMS Gateway schema
+        const { error: profileError } = await supabase
+            .from('users')
+            .insert([
+                {
+                    id: userId,
+                    email: userData.email,
+                    name: userData.name,
+                    phone_number: userData.phone,
+                    tenant_id: tenantId,
+                    role: 'admin'
+                }
+            ])
+
+        if (profileError) throw profileError
+
+        // Step 5: Initialize user settings
+        const { error: settingsError } = await supabase
+            .from('user_settings')
+            .insert([
+                {
+                    user_id: userId,
+                    sms_channel: 'native',
+                    theme: 'light',
+                    language: 'en',
+                    notifications_enabled: true
+                }
+            ])
+
+        if (settingsError) console.warn('Settings creation failed:', settingsError)
+
+        return { success: true, userId, tenantId }
+
+    } catch (error) {
+        console.error('Registration error:', error)
+        throw error
+    }
+}
+
+// Form submission handler
+form.addEventListener('submit', async (e) => {
+    e.preventDefault()
+    hideMessages()
+
+    // Get form values
+    const name = document.getElementById('name').value.trim()
+    const email = document.getElementById('email').value.trim()
+    const phone = document.getElementById('phone').value.trim()
+    const companyName = document.getElementById('companyName').value.trim()
+    const password = document.getElementById('password').value
+    const confirmPassword = document.getElementById('confirmPassword').value
+
+    // Validation
+    if (!name || !email || !phone || !companyName || !password) {
+        showError('Please fill in all required fields')
+        return
+    }
+
+    if (password.length < 6) {
+        showError('Password must be at least 6 characters long')
+        return
+    }
+
+    if (password !== confirmPassword) {
+        showError('Passwords do not match')
+        return
+    }
+
+    if (!validatePhone(phone)) {
+        showError('Please enter a valid phone number with country code (e.g., +1234567890)')
+        return
+    }
+
+    // Disable submit button
+    submitBtn.disabled = true
+    submitBtn.textContent = 'Creating Account...'
+
+    try {
+        // Register user
+        await registerUser({
+            name,
+            email,
+            phone,
+            companyName,
+            password
+        })
+
+        // Show success message
+        showSuccess('✅ Account created successfully! Please check your email to verify your account.')
+        
+        // Reset form
+        form.reset()
+
+        // Redirect to login after 3 seconds
+        setTimeout(() => {
+            window.location.href = 'login.html'
+        }, 3000)
+
+    } catch (error) {
+        // Show error message
+        let errorMsg = 'Registration failed. Please try again.'
+        
+        if (error.message.includes('duplicate key')) {
+            errorMsg = 'An account with this email already exists.'
+        } else if (error.message.includes('email')) {
+            errorMsg = 'Invalid email address.'
+        } else if (error.message) {
+            errorMsg = error.message
+        }
+        
+        showError(errorMsg)
+        
+    } finally {
+        // Re-enable submit button
+        submitBtn.disabled = false
+        submitBtn.textContent = 'Create Account'
+    }
+})
+```
+
+#### **Step 4: Configure Supabase Database Policies**
+
+Ensure Row Level Security (RLS) policies allow user creation:
+
+```sql
+-- Allow users to insert their own tenant (during registration)
+CREATE POLICY "Users can create their own tenant"
+ON sms_gateway_tenants
+FOR INSERT
+WITH CHECK (true);
+
+-- Allow users to join tenants as members
+CREATE POLICY "Users can insert tenant_members during registration"
+ON tenant_members
+FOR INSERT
+WITH CHECK (auth.uid() = user_id);
+
+-- Allow users to create their own profile
+CREATE POLICY "Users can create their own profile"
+ON sms_gateway.users
+FOR INSERT
+WITH CHECK (auth.uid() = id);
+
+-- Allow users to create their own settings
+CREATE POLICY "Users can create their own settings"
+ON user_settings
+FOR INSERT
+WITH CHECK (auth.uid() = user_id);
+```
+
+#### **Step 5: Test Registration**
+
+1. **Open registration page** in browser
+2. **Fill in the form** with valid data:
+   - Name: John Doe
+   - Email: john@example.com
+   - Phone: +1234567890
+   - Company: My Business Inc
+   - Password: securepassword123
+3. **Click "Create Account"**
+4. **Check email** for verification link (if email confirmation enabled)
+5. **Login to mobile app** with registered credentials
+
+#### **Step 6: Add Login Form**
+
+Create `login.html`:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMS Gateway Pro - Login</title>
+    <style>
+        /* Use similar styles as registration form */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .login-container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            max-width: 400px;
+            width: 100%;
+        }
+        h2 {
+            color: #333;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        .subtitle {
+            color: #666;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+            font-weight: 500;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+            box-sizing: border-box;
+        }
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .error-message {
+            background: #fee;
+            color: #c33;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .register-link {
+            text-align: center;
+            margin-top: 20px;
+            color: #666;
+            font-size: 14px;
+        }
+        .register-link a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h2>📱 SMS Gateway Pro</h2>
+        <p class="subtitle">Sign in to your account</p>
+        
+        <div id="errorMessage" class="error-message"></div>
+        
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="email">Email Address</label>
+                <input type="email" id="email" name="email" required 
+                       placeholder="your.email@example.com">
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required 
+                       placeholder="Enter your password">
+            </div>
+            
+            <button type="submit" id="submitBtn">Sign In</button>
+        </form>
+        
+        <div class="register-link">
+            Don't have an account? <a href="register.html">Create one</a>
+        </div>
+    </div>
+
+    <script type="module" src="login.js"></script>
+</body>
+</html>
+```
+
+Create `login.js`:
+
+```javascript
+// login.js
+import { supabase } from './supabaseClient.js'
+
+const form = document.getElementById('loginForm')
+const submitBtn = document.getElementById('submitBtn')
+const errorMessage = document.getElementById('errorMessage')
+
+function showError(message) {
+    errorMessage.textContent = message
+    errorMessage.style.display = 'block'
+}
+
+function hideError() {
+    errorMessage.style.display = 'none'
+}
+
+form.addEventListener('submit', async (e) => {
+    e.preventDefault()
+    hideError()
+
+    const email = document.getElementById('email').value.trim()
+    const password = document.getElementById('password').value
+
+    submitBtn.disabled = true
+    submitBtn.textContent = 'Signing In...'
+
+    try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email,
+            password
+        })
+
+        if (error) throw error
+
+        // Redirect to dashboard or app
+        window.location.href = 'dashboard.html'
+
+    } catch (error) {
+        showError(error.message || 'Login failed. Please check your credentials.')
+    } finally {
+        submitBtn.disabled = false
+        submitBtn.textContent = 'Sign In'
+    }
+})
+```
+
+#### **Step 7: Mobile App Integration**
+
+Users registered via web can login to the Flutter mobile app immediately:
+
+1. **Open SMS Gateway Pro app** on Android
+2. **Enter registered email and password**
+3. **Tap "Login"**
+4. **App automatically loads user's tenant workspace**
+5. **User can start adding contacts and sending SMS**
+
+#### **Security Best Practices**
+
+✅ **Email Verification**: Enable in Supabase Dashboard → Authentication → Providers → Email
+✅ **Password Requirements**: Enforce strong passwords (min 8 chars, uppercase, numbers)
+✅ **Rate Limiting**: Enable in Supabase to prevent abuse
+✅ **HTTPS Only**: Always use HTTPS in production
+✅ **Anon Key Protection**: Never expose service role key on client side
+✅ **RLS Policies**: Always enable Row Level Security on all tables
+✅ **Input Validation**: Validate all user inputs on both client and server
+
+#### **Troubleshooting**
+
+**❌ "User already registered" error**
+- Check if email exists in `auth.users` table
+- Use "Forgot Password" feature to reset
+
+**❌ "Invalid email" error**
+- Verify email format is correct
+- Check Supabase email provider is configured
+
+**❌ "Tenant creation failed" error**
+- Check RLS policies allow INSERT on `sms_gateway_tenants`
+- Verify user has proper permissions
+
+**❌ "Cannot read property of null" error**
+- Ensure Supabase client is properly initialized
+- Check network connectivity
+- Verify Supabase project is active
+
+#### **API Endpoints (Optional)**
+
+If you prefer backend API registration:
+
+```javascript
+// server.js (Node.js/Express example)
+const express = require('express')
+const { createClient } = require('@supabase/supabase-js')
+
+const app = express()
+app.use(express.json())
+
+const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY // Use service role key on server
+)
+
+app.post('/api/register', async (req, res) => {
+    try {
+        const { name, email, phone, companyName, password } = req.body
+
+        // Create user with admin API
+        const { data: user, error: authError } = await supabase.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+            user_metadata: { full_name: name, phone }
+        })
+
+        if (authError) throw authError
+
+        // Create tenant and link user (same as frontend flow)
+        // ... (implement tenant creation logic)
+
+        res.json({ success: true, userId: user.id })
+
+    } catch (error) {
+        res.status(400).json({ error: error.message })
+    }
+})
+
+app.listen(3000)
+```
+
+#### **Next Steps After Registration**
+
+Once registered, users can:
+
+1. ✅ **Download mobile app** and login
+2. ✅ **Add contacts** manually or via CSV import
+3. ✅ **Create groups** to organize contacts
+4. ✅ **Configure SMS channel** (Native Android or API)
+5. ✅ **Send bulk SMS** to contacts or groups
+6. ✅ **View logs** to track delivery status
+7. ✅ **Invite team members** to their workspace
+8. ✅ **Backup settings** to cloud for cross-device sync
+
+---
+
 ## 📖 Usage
 
 ### 1. Login
 - Open the app and login with your credentials
-- First-time users need to be added by an admin
+- New users can register via web form (see above section)
 
 ### 2. Add Contacts
 - Navigate to **Contacts** tab
