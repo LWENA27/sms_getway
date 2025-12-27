@@ -1,0 +1,17 @@
+/// Native (Mobile/Desktop) database connection using SQLite
+library;
+
+import 'dart:io';
+import 'package:drift/drift.dart';
+import 'package:drift/native.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
+
+/// Connect to native SQLite database
+DatabaseConnection connect() {
+  return DatabaseConnection.delayed(Future(() async {
+    final dbFolder = await getApplicationDocumentsDirectory();
+    final file = File(p.join(dbFolder.path, 'sms_gateway.sqlite'));
+    return NativeDatabase(file);
+  }));
+}

@@ -24,7 +24,6 @@
         "permission_handler",
         "provider",
         "shared_preferences",
-        "sqlite3_flutter_libs",
         "supabase_flutter",
         "url_launcher",
         "uuid"
@@ -284,13 +283,6 @@
         "path_provider_linux",
         "path_provider_platform_interface",
         "path_provider_windows"
-      ]
-    },
-    {
-      "name": "sqlite3_flutter_libs",
-      "version": "0.5.41",
-      "dependencies": [
-        "flutter"
       ]
     },
     {

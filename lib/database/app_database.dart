@@ -2,11 +2,8 @@
 /// This database provides local storage with sync capabilities
 library;
 
-import 'dart:io';
 import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
+import 'connection/connection.dart' as connection;
 
 part 'app_database.g.dart';
 
@@ -151,7 +148,7 @@ class SyncMetadata extends Table {
   SyncMetadata,
 ])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(_openConnection());
+  AppDatabase() : super(connection.connect());
 
   @override
   int get schemaVersion => 1;
@@ -429,13 +426,4 @@ class AppDatabase extends _$AppDatabase {
     await delete(localSmsLogs).go();
     await delete(syncMetadata).go();
   }
-}
-
-/// Open the database connection
-LazyDatabase _openConnection() {
-  return LazyDatabase(() async {
-    final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, 'sms_gateway.db'));
-    return NativeDatabase.createInBackground(file);
-  });
 }

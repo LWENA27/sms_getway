@@ -50,7 +50,16 @@ class SyncService extends ChangeNotifier {
   SyncService._internal();
 
   // Dependencies
-  final AppDatabase _db = AppDatabase.instance;
+  AppDatabase? get _db {
+    if (kIsWeb) return null;
+    try {
+      return AppDatabase.instance;
+    } catch (e) {
+      debugPrint('⚠️ Database not available on web: $e');
+      return null;
+    }
+  }
+
   final SupabaseClient _supabase = Supabase.instance.client;
   final Connectivity _connectivity = Connectivity();
 
@@ -121,11 +130,17 @@ class SyncService extends ChangeNotifier {
 
   /// Update pending count from database
   Future<void> _updatePendingCount() async {
+    if (_db == null) {
+      _pendingCount = 0;
+      notifyListeners();
+      return;
+    }
+
     final tenantId = TenantService().tenantId;
     if (tenantId == null) {
       _pendingCount = 0;
     } else {
-      _pendingCount = await _db.getPendingSyncCount(tenantId);
+      _pendingCount = await _db!.getPendingSyncCount(tenantId);
     }
     notifyListeners();
   }
@@ -205,7 +220,9 @@ class SyncService extends ChangeNotifier {
 
   /// Push pending contacts to Supabase
   Future<int> _pushContacts(String tenantId) async {
-    final pendingContacts = await _db.getPendingContacts(tenantId);
+    if (_db == null) return 0;
+
+    final pendingContacts = await _db!.getPendingContacts(tenantId);
     if (pendingContacts.isEmpty) return 0;
 
     int count = 0;
@@ -247,13 +264,15 @@ class SyncService extends ChangeNotifier {
     }
 
     // Mark as synced
-    if (syncedIds.isNotEmpty) {
-      await _db.markContactsSynced(syncedIds);
+    if (syncedIds.isNotEmpty && _db != null) {
+      await _db!.markContactsSynced(syncedIds);
     }
 
     // Delete locally
-    for (final id in deletedIds) {
-      await _db.deleteContact(id);
+    if (_db != null) {
+      for (final id in deletedIds) {
+        await _db!.deleteContact(id);
+      }
     }
 
     return count;
@@ -261,7 +280,9 @@ class SyncService extends ChangeNotifier {
 
   /// Push pending groups to Supabase
   Future<int> _pushGroups(String tenantId) async {
-    final pendingGroups = await _db.getPendingGroups(tenantId);
+    if (_db == null) return 0;
+
+    final pendingGroups = await _db!.getPendingGroups(tenantId);
     if (pendingGroups.isEmpty) return 0;
 
     int count = 0;
@@ -300,7 +321,9 @@ class SyncService extends ChangeNotifier {
 
   /// Push pending group members to Supabase
   Future<int> _pushGroupMembers(String tenantId) async {
-    final pendingMembers = await _db.getPendingGroupMembers(tenantId);
+    if (_db == null) return 0;
+
+    final pendingMembers = await _db!.getPendingGroupMembers(tenantId);
     if (pendingMembers.isEmpty) return 0;
 
     int count = 0;
@@ -334,7 +357,9 @@ class SyncService extends ChangeNotifier {
 
   /// Push pending SMS logs to Supabase
   Future<int> _pushSmsLogs(String tenantId) async {
-    final pendingLogs = await _db.getPendingSmsLogs(tenantId);
+    if (_db == null) return 0;
+
+    final pendingLogs = await _db!.getPendingSmsLogs(tenantId);
     if (pendingLogs.isEmpty) return 0;
 
     int count = 0;
@@ -364,8 +389,8 @@ class SyncService extends ChangeNotifier {
     }
 
     // Mark as synced
-    if (syncedIds.isNotEmpty) {
-      await _db.markSmsLogsSynced(syncedIds);
+    if (syncedIds.isNotEmpty && _db != null) {
+      await _db!.markSmsLogsSynced(syncedIds);
     }
 
     return count;
@@ -392,6 +417,8 @@ class SyncService extends ChangeNotifier {
 
   /// Pull contacts from Supabase
   Future<int> _pullContacts(String tenantId) async {
+    if (_db == null) return 0;
+
     try {
       final response = await _supabase
           .schema('sms_gateway')
@@ -403,14 +430,14 @@ class SyncService extends ChangeNotifier {
       int count = 0;
 
       for (final json in remoteContacts) {
-        final localContact = await _db.getContact(json['id']);
+        final localContact = await _db!.getContact(json['id']);
 
         // Skip if local has pending changes (local wins)
         if (localContact != null && localContact.syncStatus != 'synced') {
           continue;
         }
 
-        await _db.upsertContact(LocalContactsCompanion(
+        await _db!.upsertContact(LocalContactsCompanion(
           id: Value(json['id']),
           tenantId: Value(json['tenant_id']),
           userId: Value(json['user_id']),
@@ -432,6 +459,8 @@ class SyncService extends ChangeNotifier {
 
   /// Pull groups from Supabase
   Future<int> _pullGroups(String tenantId) async {
+    if (_db == null) return 0;
+
     try {
       final response = await _supabase
           .schema('sms_gateway')
@@ -443,7 +472,7 @@ class SyncService extends ChangeNotifier {
       int count = 0;
 
       for (final json in remoteGroups) {
-        await _db.upsertGroup(LocalGroupsCompanion(
+        await _db!.upsertGroup(LocalGroupsCompanion(
           id: Value(json['id']),
           tenantId: Value(json['tenant_id']),
           userId: Value(json['user_id']),
@@ -464,6 +493,8 @@ class SyncService extends ChangeNotifier {
 
   /// Pull group members from Supabase
   Future<int> _pullGroupMembers(String tenantId) async {
+    if (_db == null) return 0;
+
     try {
       final response = await _supabase
           .schema('sms_gateway')
@@ -475,7 +506,7 @@ class SyncService extends ChangeNotifier {
       int count = 0;
 
       for (final json in remoteMembers) {
-        await _db.insertGroupMember(LocalGroupMembersCompanion(
+        await _db!.insertGroupMember(LocalGroupMembersCompanion(
           id: Value(json['id']),
           groupId: Value(json['group_id']),
           contactId: Value(json['contact_id']),
@@ -495,6 +526,8 @@ class SyncService extends ChangeNotifier {
 
   /// Pull SMS logs from Supabase (last 500)
   Future<int> _pullSmsLogs(String tenantId) async {
+    if (_db == null) return 0;
+
     try {
       final response = await _supabase
           .schema('sms_gateway')
@@ -508,7 +541,7 @@ class SyncService extends ChangeNotifier {
       int count = 0;
 
       for (final json in remoteLogs) {
-        await _db.insertSmsLog(LocalSmsLogsCompanion(
+        await _db!.insertSmsLog(LocalSmsLogsCompanion(
           id: Value(json['id']),
           tenantId: Value(json['tenant_id']),
           userId: Value(json['user_id']),

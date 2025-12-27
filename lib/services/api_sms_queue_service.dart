@@ -274,7 +274,8 @@ class ApiSmsQueueService extends ChangeNotifier {
       } else {
         // Mark as failed so it appears in logs but user can see what went wrong
         await _updateRequestStatus(request.id, 'failed',
-            errorMessage: 'Failed to send SMS - check permissions and retry manually');
+            errorMessage:
+                'Failed to send SMS - check permissions and retry manually');
         debugPrint('❌ Failed to send SMS to ${request.phoneNumber}');
       }
     } catch (e) {
