@@ -79,6 +79,7 @@ class LocalDataService {
             .from('contacts')
             .select()
             .eq('tenant_id', tenantId)
+            .eq('user_id', Supabase.instance.client.auth.currentUser!.id)
             .order('name');
 
         final remoteContacts = response as List;
@@ -109,7 +110,7 @@ class LocalDataService {
     required String phoneNumber,
   }) async {
     final tenantId = TenantService().tenantId;
-    final userId = TenantService().currentTenant?.clientId;
+    final userId = Supabase.instance.client.auth.currentUser?.id;
 
     if (tenantId == null || userId == null) {
       throw Exception('No tenant selected');
