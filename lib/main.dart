@@ -13,6 +13,7 @@ import 'screens/bulk_sms_screen.dart';
 import 'screens/sms_logs_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/tenant_selector_screen.dart';
+import 'screens/registration_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -348,7 +349,15 @@ class _LoginPageState extends State<LoginPage> {
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 GestureDetector(
-                  onTap: isLoading ? null : _signup,
+                  onTap: isLoading
+                      ? null
+                      : () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const RegistrationPage(),
+                            ),
+                          );
+                        },
                   child: Text(
                     'Sign Up',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -498,6 +507,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   String? currentUserEmail;
+  String? currentUserName;
   String? currentTenantName;
   int contactCount = 0;
   int groupCount = 0;
@@ -522,6 +532,24 @@ class _HomePageState extends State<HomePage> {
           currentUserEmail = authUser.email;
           currentTenantName = tenantService.tenantName;
         });
+
+        // Fetch profile display name/phone from sms_gateway.users if available
+        try {
+          final profile = await Supabase.instance.client
+              .schema('sms_gateway')
+              .from('users')
+              .select('name, phone_number')
+              .eq('id', authUser.id)
+              .maybeSingle();
+
+          if (profile != null && mounted) {
+            setState(() {
+              currentUserName = profile['name'] as String?;
+            });
+          }
+        } catch (e) {
+          debugPrint('⚠️ Unable to load profile name: $e');
+        }
 
         // ✅ OPTIMIZATION 1: Load local data FIRST (instant UI update)
         final localCounts = await LocalDataService().getDashboardCounts();
@@ -708,7 +736,9 @@ class _HomePageState extends State<HomePage> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            currentUserEmail ?? 'User',
+                            currentUserName?.isNotEmpty == true
+                                ? currentUserName!
+                                : (currentUserEmail ?? 'User'),
                             style: Theme.of(context)
                                 .textTheme
                                 .bodyMedium

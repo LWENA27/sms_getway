@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/theme.dart';
+import '../core/tenant_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -52,12 +53,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final profile = await Supabase.instance.client
             .schema('sms_gateway')
             .from('users')
-            .select('display_name, phone_number')
+            .select('name, phone_number, tenant_id')
             .eq('id', user.id)
             .maybeSingle();
 
         if (profile != null) {
-          _displayNameController.text = profile['display_name'] ?? '';
+          _displayNameController.text = profile['name'] ?? '';
           _phoneController.text = profile['phone_number'] ?? '';
         }
       } catch (e) {
@@ -80,15 +81,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) throw 'User not logged in';
 
-      // Update profile in sms_gateway.users
+      // Upsert profile in sms_gateway.users using existing schema (name, phone_number)
+      final tenantId = TenantService().tenantId;
       await Supabase.instance.client
           .schema('sms_gateway')
           .from('users')
-          .update({
-        'display_name': _displayNameController.text.trim(),
+          .upsert({
+        'id': user.id,
+        'email': user.email,
+        'name': _displayNameController.text.trim(),
         'phone_number': _phoneController.text.trim(),
+        'tenant_id': tenantId,
         'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', user.id);
+      }, onConflict: 'id');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
