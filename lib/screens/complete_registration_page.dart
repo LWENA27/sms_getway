@@ -6,10 +6,13 @@ import '../core/theme.dart';
 ///
 /// This page handles:
 /// 1. User authentication (auth.users)
-/// 2. Organization/Tenant creation (sms_gateway.tenants)
-/// 3. User profile creation (sms_gateway.users)
-/// 4. Tenant membership (sms_gateway.tenant_members)
-/// 5. Default settings initialization
+/// 2. Client creation (public.clients)
+/// 3. Tenant creation (sms_gateway.tenants)
+/// 4. User profile creation (sms_gateway.users)
+/// 5. Tenant membership (sms_gateway.tenant_members)
+/// 6. User settings initialization (sms_gateway.user_settings)
+/// 7. Tenant settings initialization (sms_gateway.tenant_settings)
+/// 8. Product access record (public.client_product_access) - Required for login
 class CompleteRegistrationPage extends StatefulWidget {
   const CompleteRegistrationPage({super.key});
 
@@ -586,6 +589,28 @@ class _CompleteRegistrationPageState extends State<CompleteRegistrationPage> {
         'plan_type': selectedPlan,
       });
       debugPrint('✅ Tenant settings initialized');
+
+      // STEP 8: Create client_product_access record (CRITICAL for login)
+      debugPrint('🔐 Creating product access record...');
+
+      // First, get the product ID for sms_gateway
+      final productResponse = await supabase
+          .from('products')
+          .select('id')
+          .eq('schema_name', 'sms_gateway')
+          .single();
+
+      final productId = productResponse['id'];
+
+      // Create the access record
+      await supabase.from('client_product_access').insert({
+        'user_id': userId,
+        'client_id': clientId,
+        'product_id': productId,
+        'tenant_id': tenantId,
+        'role': 'owner',
+      });
+      debugPrint('✅ Product access record created');
 
       debugPrint('🎉 Registration complete!');
 

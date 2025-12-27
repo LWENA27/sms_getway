@@ -109,29 +109,39 @@ This section provides complete instructions for developers implementing user reg
 
 SMS Gateway Pro uses **Supabase Authentication** with a multi-tenant architecture. Users can register via a web form, and their account will be automatically linked to a tenant workspace.
 
-#### **Registration Flow**
+#### **Registration Flow (8 Required Steps)**
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                  REGISTRATION FLOW                       │
+│           COMPLETE REGISTRATION FLOW                     │
 └─────────────────────────────────────────────────────────┘
 
-1. User fills registration form (email, password, name, phone)
+1. Create auth.users account (Supabase Auth)
                         ↓
-2. Call Supabase Auth API to create user account
+2. Create public.clients record (top-level organization)
                         ↓
-3. User record created in auth.users table
+3. Create sms_gateway.tenants record (product tenant)
                         ↓
-4. Create tenant record in sms_gateway_tenants table
+4. Create sms_gateway.users record (user profile)
                         ↓
-5. Link user to tenant in tenant_members table
+5. Create sms_gateway.tenant_members record (membership)
                         ↓
-6. Create user profile in sms_gateway.users table
+6. Create sms_gateway.user_settings record (preferences)
                         ↓
-7. Send confirmation email (if enabled)
+7. Create sms_gateway.tenant_settings record (org config)
                         ↓
-8. User can login to mobile app or web portal
+8. Create public.client_product_access record (CRITICAL!)
+   ⚠️  Required for login - without this, user cannot access app
+                        ↓
+✅ User can now login to app
 ```
+
+**⚠️ IMPORTANT:** Step 8 (`client_product_access`) is critical! Without it, users will see "You do not have access to SMS Gateway" error when trying to login, even though registration succeeded. The login system checks this table to verify product access.
+
+**Required RLS Policies:**
+- `public.clients` - INSERT policy for authenticated users
+- `public.client_product_access` - INSERT and SELECT policies
+- See `fix_clients_rls_policy.sql` and `fix_product_access_rls_policy.sql`
 
 #### **Step 1: Set Up Supabase Client**
 
