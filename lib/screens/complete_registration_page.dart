@@ -591,7 +591,7 @@ class _CompleteRegistrationPageState extends State<CompleteRegistrationPage> {
 
       // Show success and navigate to home
       if (!mounted) return;
-      
+
       // Navigate back to root - AuthWrapper will detect the logged-in user
       // and automatically navigate to HomePage or TenantSelector
       Navigator.of(context).popUntil((route) => route.isFirst);
