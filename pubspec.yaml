@@ -24,7 +24,7 @@ dependencies:
 
   # Local Database (Offline-First)
   drift: ^2.22.1
-  # sqlite3_flutter_libs: ^0.5.28  # Not compatible with web - removed for web support
+  sqlite3_flutter_libs: ^0.5.28  # Required for mobile/desktop SQLite support
   path_provider: ^2.1.5
   path: ^1.9.0
 
