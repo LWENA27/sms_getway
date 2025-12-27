@@ -23,12 +23,12 @@ A **distributed, SIM-based messaging platform** that allows organizations to sen
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  PHASE 1: Local SMS Gateway                         ✅ COMPLETE         │
 ├─────────────────────────────────────────────────────────────────────────┤
-│  PHASE 2: Connected & API-Enabled Gateway           ✅ MOSTLY COMPLETE  │
+│  PHASE 2: Connected & API-Enabled Gateway           🔄 IN PROGRESS      │
 │  ├── 2.1 Organization & Authentication              ✅ COMPLETE         │
-│  ├── 2.2 Backend & Sync Layer                       ✅ COMPLETE         │
-│  ├── 2.3 API-Triggered SMS                          ✅ IMPLEMENTED       │
-│  ├── 2.4 API Security & Control                     ✅ IMPLEMENTED       │
-│  ├── 2.5 Provider / Sender ID Integration           🔲 Next             │
+│  ├── 2.2 Backend & Sync Layer                       🔄 IN PROGRESS      │
+│  ├── 2.3 API-Triggered SMS                          🔄 PARTIAL          │
+│  ├── 2.4 API Security & Control                     🔲 PLANNED          │
+│  ├── 2.5 Provider / Sender ID Integration           🔲 PLANNED          │
 │  └── 2.6 Settings Backup & Cross-Device Sync        ✅ COMPLETE         │
 ├─────────────────────────────────────────────────────────────────────────┤
 │  PHASE 3: Scale & Enterprise Features               📋 PLANNED          │
@@ -81,49 +81,69 @@ User → App UI → Android SmsManager → Phone SIM → Recipient
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Organization Registration | ✅ | Company/school signup via Supabase |
+| Organization Registration | ✅ | Complete 8-step registration flow |
 | Secure Login | ✅ | Email/password authentication |
 | Multi-Tenant Access | ✅ | Users can belong to multiple orgs |
 | Workspace Picker | ✅ | Select organization after login |
 | Tenant-Scoped Data | ✅ | All data filtered by tenant_id |
 | Session Management | ✅ | Secure token handling |
 | Role System | ✅ | Owner, Admin, Member, Viewer roles |
+| Client-Product Access | ✅ | Product access verification for login |
+| RLS Policies | ✅ | Row-level security on all tables |
 
-**Architecture:**
+**Registration Flow (8 Steps):**
 ```
-User Login → Load Tenants → (2+ tenants?) → Workspace Picker → Home
-                              ↓ (1 tenant)
-                         Auto-select → Home
+1. Create auth.users account
+2. Create public.clients record (top-level organization)
+3. Create sms_gateway.tenants record (product tenant)
+4. Create sms_gateway.users record (user profile)
+5. Create sms_gateway.tenant_members record (membership)
+6. Create sms_gateway.user_settings record (preferences)
+7. Create sms_gateway.tenant_settings record (org config)
+8. Create public.client_product_access record (login verification)
 ```
 
-📌 **Status:** Completed December 2024
+**Login Architecture:**
+```
+User Login → Auth → Load Tenants (via client_product_access)
+                         ↓
+              (2+ tenants?) → Workspace Picker → Home
+                         ↓ (1 tenant)
+                    Auto-select → Home
+```
+
+📌 **Status:** Completed December 28, 2024
 
 ---
 
-### 🔸 Phase 2.2 – Backend & Sync Layer
+### 🔸 Phase 2.2 – Backend & Sync Layer 🔄 IN PROGRESS
 
 **Objective:** Centralize message logging and enable offline-to-online sync.
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Central Message Storage | 🔲 | PostgreSQL via Supabase |
-| Sync Sent/Failed SMS | 🔲 | Upload logs when online |
-| Timestamping | 🔲 | Accurate message timing |
-| Message Source Tracking | 🔲 | Track origin: UI, API, Provider |
+| Central Message Storage | ✅ | PostgreSQL via Supabase |
+| SMS Logs Table | ✅ | sms_gateway.sms_logs with delivery tracking |
+| Contacts Storage | ✅ | Centralized contact management |
+| Groups Storage | ✅ | Group and membership tracking |
+| Sync Sent/Failed SMS | � | Partial - logs created on send |
+| Timestamping | ✅ | Accurate message timing |
+| Message Source Tracking | � | UI tracking implemented |
+| Offline-First Storage | 🔲 | Local cache with sync planned |
 
-**Sync Behavior:**
+**Current Sync Behavior:**
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  OFFLINE: SMS sent → Stored locally                        │
-│  ONLINE:  Local logs → Synced to Supabase                  │
+│  ONLINE: SMS sent → Stored directly to Supabase            │
+│  OFFLINE: To be implemented - local queue with sync        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-📌 Manual SMS can sync **later** when internet is available.
+📌 Currently requires internet connection. Full offline support planned.
 
 ---
 
-### 🔸 Phase 2.3 – API-Triggered SMS (Online Only)
+### 🔸 Phase 2.3 – API-Triggered SMS (Online Only) 🔄 PARTIAL
 
 **Objective:** Allow external systems (CRMs, ERPs, school systems) to trigger SMS via the mobile app.
 
@@ -139,29 +159,39 @@ External System → Internet → API → Mobile App → SIM → Recipient
    }
 ```
 
-**API Endpoints (Planned):**
+**API Implementation Status:**
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/sms/send` | Send single SMS |
-| `POST` | `/api/sms/bulk` | Send bulk SMS |
-| `GET` | `/api/sms/logs` | Get SMS history |
-| `GET` | `/api/sms/status/:id` | Get delivery status |
-| `POST` | `/api/contacts` | Create contact |
-| `GET` | `/api/contacts` | List contacts |
-| `POST` | `/api/groups` | Create group |
-| `GET` | `/api/groups` | List groups |
+| Method | Endpoint | Status | Description |
+|--------|----------|--------|-------------|
+| `POST` | `/api/sms/send` | 🔄 | Queue-based system implemented |
+| `POST` | `/api/sms/bulk` | 🔄 | Via queue service |
+| `GET` | `/api/sms/logs` | 🔲 | Planned |
+| `GET` | `/api/sms/status/:id` | 🔲 | Planned |
+| `POST` | `/api/contacts` | 🔲 | Planned |
+| `GET` | `/api/contacts` | 🔲 | Planned |
+| `POST` | `/api/groups` | 🔲 | Planned |
+| `GET` | `/api/groups` | 🔲 | Planned |
+
+**Current Implementation:**
+- ✅ API SMS Queue Service (ApiSmsQueueService)
+- ✅ Database polling every 30 seconds
+- ✅ Support for both Native SMS and QuickSMS API
+- ✅ Auto-start queue processing setting
+- ✅ Manual queue control in Settings UI
+- 🔲 Edge Functions for API endpoints (planned)
+- 🔲 API key authentication (planned)
 
 **Requirements:**
 - ✅ Active internet connection
-- ✅ Valid API key
-- ✅ Device online with app running (foreground/background)
+- 🔲 Valid API key (to be implemented)
+- ✅ Device online with app running
+- ✅ Queue processing enabled in settings
 
 📌 API-triggered SMS **cannot work offline** – SMS delivery still uses phone's SIM.
 
 ---
 
-### 🔸 Phase 2.4 – API Security & Control
+### 🔸 Phase 2.4 – API Security & Control 🔲 PLANNED
 
 **Objective:** Prevent misuse and unauthorized SMS sending.
 
@@ -172,16 +202,23 @@ External System → Internet → API → Mobile App → SIM → Recipient
 | Request Authentication | 🔲 | Bearer token validation |
 | Rate Limiting | 🔲 | Prevent abuse |
 | Device Authorization | 🔲 | Verify registered device |
-| Message Ownership | 🔲 | Tenant isolation |
+| Message Ownership | ✅ | Tenant isolation via RLS |
 | Audit Logging | 🔲 | Track all API calls |
+| Edge Functions | 🔲 | Supabase serverless endpoints |
 
-**Authentication:**
+**Planned Authentication:**
 ```http
 POST /api/sms/send
 Authorization: Bearer sk_live_xxx
 X-Tenant-ID: org_uuid_xxx
 Content-Type: application/json
 ```
+
+**Current Security:**
+- ✅ Row Level Security (RLS) on all tables
+- ✅ Tenant isolation at database level
+- ✅ Supabase Auth for user authentication
+- 🔲 API key system (planned)
 
 ---
 
@@ -264,7 +301,7 @@ Device B:
 3. ✅ Settings match Device A automatically
 ```
 
-📌 **Status:** Completed December 24, 2025
+📌 **Status:** Completed December 24, 2024
 
 ---
 
@@ -300,11 +337,12 @@ Device B:
 | Phase | Milestone | Target | Status |
 |-------|-----------|--------|--------|
 | **1.0** | Local SMS Gateway | Q4 2024 | ✅ Complete |
-| **2.1** | Organization & Auth | Q1 2025 | 🔲 Planned |
-| **2.2** | Backend & Sync | Q1 2025 | 🔲 Planned |
-| **2.3** | API-Triggered SMS | Q1 2025 | 🔲 Planned |
-| **2.4** | API Security | Q2 2025 | 🔲 Planned |
+| **2.1** | Organization & Auth | Q4 2024 | ✅ Complete |
+| **2.2** | Backend & Sync | Q4 2024 | � In Progress |
+| **2.3** | API-Triggered SMS | Q1 2025 | � Partial |
+| **2.4** | API Security | Q1 2025 | 🔲 Planned |
 | **2.5** | Sender ID | Q2 2025 | 🔲 Planned |
+| **2.6** | Settings Backup | Q4 2024 | ✅ Complete |
 | **3.0** | Enterprise Features | Q3 2025 | 📋 Planned |
 
 ---
@@ -315,13 +353,16 @@ Device B:
 
 | Feature | Sub-Phase | Status |
 |---------|-----------|--------|
-| Organization Registration | 2.1 | 🔲 |
-| Secure Authentication | 2.1 | 🔲 |
-| Device Binding | 2.1 | 🔲 |
-| Message Sync to Cloud | 2.2 | 🔲 |
-| API Key Generation | 2.4 | 🔲 |
-| REST API Endpoints | 2.3 | 🔲 |
-| Rate Limiting | 2.4 | 🔲 |
+| Organization Registration | 2.1 | ✅ Complete |
+| Secure Authentication | 2.1 | ✅ Complete |
+| Multi-Tenant Access | 2.1 | ✅ Complete |
+| Settings Backup/Restore | 2.6 | ✅ Complete |
+| Client-Product Access | 2.1 | ✅ Complete |
+| Offline-First Storage | 2.2 | � In Progress |
+| Message Sync to Cloud | 2.2 | � In Progress |
+| REST API Endpoints | 2.3 | 🔲 Planned |
+| API Key Generation | 2.4 | 🔲 Planned |
+| Rate Limiting | 2.4 | 🔲 Planned |
 
 ### 🟡 Medium Priority (Phase 2.5 / 3)
 
@@ -349,12 +390,16 @@ Device B:
 
 ## 🛡️ Security Roadmap
 
-### ✅ Current (Phase 1)
+### ✅ Current (Phase 1 & 2.1)
 
 - ✅ Supabase Auth (email/password)
-- ✅ Row Level Security (RLS)
-- ✅ Tenant Isolation
+- ✅ Row Level Security (RLS) on all tables
+- ✅ Tenant Isolation (client_product_access verification)
 - ✅ HTTPS/TLS encryption
+- ✅ 8-step secure registration flow
+- ✅ Session management
+- ✅ Multi-tenant access control
+- ✅ Settings encryption in SharedPreferences
 
 ### 🔲 Planned (Phase 2+)
 
@@ -412,4 +457,31 @@ Have a feature request?
 
 ---
 
-*Last Updated: December 2025*
+## 📝 Recent Updates (December 2024)
+
+### December 28, 2024
+- ✅ Fixed registration Step 8: Added `client_product_access` record creation
+- ✅ Critical fix: Without Step 8, users couldn't login after registration
+- ✅ Updated registration to 8-step flow matching remote schema
+- ✅ Added RLS policies for `public.clients` and `public.client_product_access`
+- ✅ Consolidated documentation, removed 7 redundant markdown files
+- ✅ Updated README with complete registration flow and warnings
+
+### December 24, 2024
+- ✅ Completed Phase 2.6: Settings Backup & Cross-Device Sync
+- ✅ Implemented user and tenant settings backup/restore
+- ✅ Added audit trail for all backup/restore operations
+- ✅ Created RLS policies for settings tables
+- ✅ Added UI controls in Settings screen
+
+### November-December 2024
+- ✅ Completed Phase 2.1: Organization & Authentication
+- ✅ Implemented complete 8-step registration flow
+- ✅ Added multi-tenant architecture with workspace isolation
+- ✅ Implemented tenant selector for users with multiple organizations
+- ✅ Added auto-select for single-tenant users
+- ✅ Created comprehensive RLS policies for data isolation
+
+---
+
+*Last Updated: December 28, 2024*
