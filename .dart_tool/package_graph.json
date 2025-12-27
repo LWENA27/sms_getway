@@ -287,6 +287,13 @@
       ]
     },
     {
+      "name": "sqlite3_flutter_libs",
+      "version": "0.5.41",
+      "dependencies": [
+        "flutter"
+      ]
+    },
+    {
       "name": "drift",
       "version": "2.29.0",
       "dependencies": [
@@ -1639,13 +1646,6 @@
       "version": "1.0.0",
       "dependencies": [
         "fixnum"
-      ]
-    },
-    {
-      "name": "sqlite3_flutter_libs",
-      "version": "0.5.41",
-      "dependencies": [
-        "flutter"
       ]
     }
   ],
