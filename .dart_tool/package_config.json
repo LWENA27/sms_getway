@@ -782,6 +782,12 @@
       "languageVersion": "3.5"
     },
     {
+      "name": "sqlite3_flutter_libs",
+      "rootUri": "file:///C:/Users/LwenaTechWare/AppData/Local/Pub/Cache/hosted/pub.dev/sqlite3_flutter_libs-0.5.41",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
       "name": "sqlparser",
       "rootUri": "file:///C:/Users/LwenaTechWare/AppData/Local/Pub/Cache/hosted/pub.dev/sqlparser-0.42.1",
       "packageUri": "lib/",

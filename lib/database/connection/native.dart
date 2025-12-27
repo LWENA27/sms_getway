@@ -12,6 +12,7 @@ DatabaseConnection connect() {
   return DatabaseConnection.delayed(Future(() async {
     final dbFolder = await getApplicationDocumentsDirectory();
     final file = File(p.join(dbFolder.path, 'sms_gateway.sqlite'));
-    return NativeDatabase(file);
+    final executor = NativeDatabase.createInBackground(file);
+    return DatabaseConnection(executor);
   }));
 }
