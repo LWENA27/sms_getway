@@ -13,7 +13,7 @@ import 'screens/bulk_sms_screen.dart';
 import 'screens/sms_logs_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/tenant_selector_screen.dart';
-import 'screens/registration_page.dart';
+import 'screens/complete_registration_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -354,7 +354,7 @@ class _LoginPageState extends State<LoginPage> {
                       : () {
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) => const RegistrationPage(),
+                              builder: (_) => const CompleteRegistrationPage(),
                             ),
                           );
                         },
