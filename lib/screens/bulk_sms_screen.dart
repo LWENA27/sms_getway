@@ -1,9 +1,12 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme.dart';
 import '../core/tenant_service.dart';
 import '../services/local_data_service.dart';
+import '../services/web_sms_service.dart';
 import '../api/native_sms_service.dart';
 import '../contacts/contact_model.dart';
 import '../groups/group_model.dart';
@@ -94,19 +97,6 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
     final selectedChannel = prefs.getString('sms_channel') ?? 'thisPhone';
     debugPrint('📱 Using SMS Channel: $selectedChannel');
 
-    // Request SMS permission for "This Phone" channel
-    if (selectedChannel == 'thisPhone') {
-      final status = await Permission.sms.request();
-      if (!status.isGranted) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('SMS permission denied')),
-          );
-        }
-        return;
-      }
-    }
-
     setState(() => isLoading = true);
 
     try {
@@ -115,6 +105,30 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
         throw 'No tenant selected';
       }
 
+      // Platform detection: Check if we can send SMS natively
+      final bool isAndroid = !kIsWeb && Platform.isAndroid;
+
+      // If not Android, queue SMS for processing by mobile app
+      if (!isAndroid) {
+        await _queueSmsForMobile(recipients, messageController.text);
+        return; // Exit early
+      }
+
+      // Android platform - Request SMS permission for "This Phone" channel
+      if (selectedChannel == 'thisPhone') {
+        final status = await Permission.sms.request();
+        if (!status.isGranted) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('SMS permission denied')),
+            );
+          }
+          setState(() => isLoading = false);
+          return;
+        }
+      }
+
+      // Android platform - proceed with normal SMS sending
       int successCount = 0;
       int failureCount = 0;
 
@@ -265,6 +279,116 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
 
     onSuccess(successCount);
     onFailure(failureCount);
+  }
+
+  /// Queue SMS for mobile app processing (Web/iOS/non-Android platforms)
+  Future<void> _queueSmsForMobile(
+      List<Contact> recipients, String message) async {
+    try {
+      final phoneNumbers = recipients.map((r) => r.phoneNumber).toList();
+
+      debugPrint(
+          '🌐 [Platform: ${kIsWeb ? "Web" : Platform.operatingSystem}] Queuing ${phoneNumbers.length} SMS');
+
+      // Queue SMS requests using WebSmsService
+      await WebSmsService().queueBulkSms(
+        phoneNumbers: phoneNumbers,
+        message: message,
+        priority: 0,
+        metadata: {
+          'source': 'bulk_sms_screen',
+          'platform': kIsWeb ? 'web' : Platform.operatingSystem,
+        },
+      );
+
+      debugPrint('✅ SMS queued successfully');
+
+      if (mounted) {
+        setState(() => isLoading = false);
+
+        // Show popup: SMS pending, login to mobile to send
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.schedule_send,
+                    color: Theme.of(context).primaryColor),
+                const SizedBox(width: 12),
+                const Text('SMS Pending'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '📱 ${phoneNumbers.length} SMS queued for sending',
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.info_outline,
+                              size: 20, color: Colors.orange.shade700),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              'To send these SMS:',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      const Text('✅ Login to mobile app (Android)'),
+                      const Text('✅ Enable queue processing in Settings'),
+                      const Text('✅ Keep app running in background'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  messageController.clear();
+                  setState(() {
+                    selectedContacts = [];
+                    selectedGroupId = null;
+                  });
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('❌ Error queuing SMS: $e');
+      if (mounted) {
+        setState(() => isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error queuing SMS: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _logSmsToDatabase({
