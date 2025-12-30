@@ -1,0 +1,61 @@
+name: Release to GitHub
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.16.0'
+    
+    - name: Get dependencies
+      run: flutter pub get
+    
+    - name: Build Web
+      run: flutter build web --release
+    
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: SMS Gateway Pro ${{ github.ref_name }}
+        body: |
+          ## SMS Gateway Pro ${{ github.ref_name }}
+          
+          ### Installation
+          ```bash
+          git clone https://github.com/LWENA27/sms_getway.git
+          cd sms_getway
+          flutter pub get
+          flutter run
+          ```
+          
+          See [INSTALLATION.md](https://github.com/LWENA27/sms_getway/blob/main/INSTALLATION.md) for detailed setup.
+          
+          ### Features
+          - ✅ Bulk SMS Management
+          - ✅ Contact Management with CSV Import
+          - ✅ Multi-tenant Architecture
+          - ✅ REST API Integration
+          - ✅ Cloud Backup & Sync
+          - ✅ Dark Mode Support
+          
+          ### Requirements
+          - Flutter SDK 3.0+
+          - Android device or emulator
+          - Supabase account (pre-configured)
+          
+          [View Full Changelog](https://github.com/LWENA27/sms_getway/blob/main/CHANGELOG.md)
+        draft: false
+        prerelease: false
