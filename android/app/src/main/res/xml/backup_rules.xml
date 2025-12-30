@@ -3,6 +3,10 @@
     <!-- Include shared preferences (settings) -->
     <include domain="sharedpref" path="."/>
     
+    <!-- Include all databases and files first -->
+    <include domain="database" path="."/>
+    <include domain="file" path="."/>
+    
     <!-- Exclude sensitive data -->
     <exclude domain="sharedpref" path="FlutterSecureStorage"/>
     <exclude domain="database" path="local_database.db"/>

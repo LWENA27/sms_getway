@@ -7,6 +7,17 @@ A multi-tenant SMS gateway application for bulk messaging with enterprise-grade 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Flutter](https://img.shields.io/badge/Flutter-3.0+-02569B?logo=flutter)](https://flutter.dev)
 [![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?logo=supabase)](https://supabase.com)
+[![GitHub Release](https://img.shields.io/badge/Release-v1.0.0-brightgreen)](https://github.com/LWENA27/sms_getway/releases)
+
+---
+
+## 🎯 Get Started Now!
+
+### 👉 [📥 DOWNLOAD APP - Easy 1-Click Install](DOWNLOAD_APP.md)
+
+**No coding needed!** Just download the APK and tap to install on your Android phone.
+
+> **Version**: 1.0.0 | **Size**: 60 MB | **Requires**: Android 5.0+
 
 ---
 
@@ -64,20 +75,57 @@ A multi-tenant SMS gateway application for bulk messaging with enterprise-grade 
 
 ---
 
-## 🚀 Quick Start
+## � Download & Install
 
-### Prerequisites
-- Flutter SDK 3.0+
-- Android Studio or VS Code
-- Android device (for SMS sending)
-- Supabase account
+### ⚡ Quick Start (5 minutes)
 
-### Installation
+Get SMS Gateway Pro running **super fast**:
 
 ```bash
-# Clone the repository
 git clone https://github.com/LWENA27/sms_getway.git
 cd sms_getway
+flutter pub get
+flutter run
+```
+
+**That's it!** The app will build and launch on your Android device.
+
+👉 **[See QUICKSTART.md for detailed quick start guide](QUICKSTART.md)**
+
+### 📚 Full Installation Guide
+
+For detailed setup instructions with troubleshooting:
+
+👉 **[See INSTALLATION.md for complete setup guide](INSTALLATION.md)**
+
+### 🔗 Download Options
+
+| Method | Link |
+|--------|------|
+| **Clone with Git** | `git clone https://github.com/LWENA27/sms_getway.git` |
+| **Download ZIP** | [GitHub Releases](https://github.com/LWENA27/sms_getway/releases) |
+| **GitHub Repository** | https://github.com/LWENA27/sms_getway |
+
+### Prerequisites
+- **Flutter SDK 3.0+** - [Install Flutter](https://flutter.dev/docs/get-started/install)
+- **Git** - [Install Git](https://git-scm.com/download)
+- **Android Device** - Android 5.0 (API 21) or higher
+- **USB Cable** - To connect your phone
+
+### Installation Steps
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/LWENA27/sms_getway.git
+cd sms_getway
+
+# 2. Install dependencies
+flutter pub get
+
+# 3. Connect your Android phone with USB debugging enabled
+
+# 4. Run the app
+flutter run
 
 # Install dependencies
 flutter pub get
