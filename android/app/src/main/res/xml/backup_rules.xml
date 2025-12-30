@@ -1,14 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <!-- Include shared preferences (settings) -->
+    <!-- Include only shared preferences -->
     <include domain="sharedpref" path="."/>
     
-    <!-- Include all databases and files first -->
-    <include domain="database" path="."/>
-    <include domain="file" path="."/>
+    <!-- Exclude databases (local cache) -->
+    <exclude domain="database" path="."/>
     
-    <!-- Exclude sensitive data -->
-    <exclude domain="sharedpref" path="FlutterSecureStorage"/>
-    <exclude domain="database" path="local_database.db"/>
+    <!-- Exclude cache and temp files -->
     <exclude domain="file" path="cache"/>
 </full-backup-content>

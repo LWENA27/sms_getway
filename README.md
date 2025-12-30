@@ -11,13 +11,13 @@ A multi-tenant SMS gateway application for bulk messaging with enterprise-grade 
 
 ---
 
-## 🎯 Get Started Now!
+## 🎯 Download & Install Now!
 
-### 👉 [📥 DOWNLOAD APP - Easy 1-Click Install](DOWNLOAD_APP.md)
+### 👉 [📥 **CLICK HERE TO DOWNLOAD THE APP**](GET_APP.md)
 
-**No coding needed!** Just download the APK and tap to install on your Android phone.
+**Super easy!** No coding needed. Just download the APK file and install on your Android phone in 3 steps.
 
-> **Version**: 1.0.0 | **Size**: 60 MB | **Requires**: Android 5.0+
+> **Version**: 1.0.0 | **Size**: ~60 MB | **Requires**: Android 5.0+
 
 ---
 
