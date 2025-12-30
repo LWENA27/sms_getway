@@ -48,5 +48,7 @@ app.*.map.json
 .vscode/
 .dart_tool/
 .flutter-plugins-dependencies
-build/
+# Ignore most build artifacts except web
+build/*
+!build/web/
 dfjkdfk
