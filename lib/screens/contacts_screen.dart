@@ -1176,7 +1176,7 @@ class _ContactsScreenState extends State<ContactsScreen>
                 ),
               ),
               const SizedBox(height: 12),
-              
+
               // Tertiary action - Import VCF
               SizedBox(
                 width: double.infinity,

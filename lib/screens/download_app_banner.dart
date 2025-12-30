@@ -16,7 +16,7 @@ class _DownloadAppBannerState extends State<DownloadAppBanner> {
 
   Future<void> _launchURL() async {
     final url = Uri.parse(
-      'https://github.com/LWENA27/sms_getway/blob/main/GET_APP.md',
+      'https://github.com/LWENA27/sms_getway/releases/download/v1.0.0/sms_getway_pro.apk',
     );
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -124,7 +124,7 @@ class DownloadAppBannerCompact extends StatelessWidget {
 
   Future<void> _launchURL() async {
     final url = Uri.parse(
-      'https://github.com/LWENA27/sms_getway/blob/main/GET_APP.md',
+      'https://github.com/LWENA27/sms_getway/releases/download/v1.0.0/sms_getway_pro.apk',
     );
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
