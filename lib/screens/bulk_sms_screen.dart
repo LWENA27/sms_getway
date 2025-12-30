@@ -10,6 +10,7 @@ import '../services/web_sms_service.dart';
 import '../api/native_sms_service.dart';
 import '../contacts/contact_model.dart';
 import '../groups/group_model.dart';
+import 'download_app_banner.dart';
 
 class BulkSmsScreen extends StatefulWidget {
   final VoidCallback? onNavigateToLogs;
@@ -438,6 +439,9 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Download App Banner for web users
+                  const DownloadAppBannerCompact(),
+                  const SizedBox(height: AppTheme.paddingMedium),
                   // Mode selector
                   Text(
                     'Mode',

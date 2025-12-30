@@ -6,6 +6,7 @@ import '../core/theme.dart';
 import '../services/local_data_service.dart';
 import '../contacts/contact_model.dart';
 import '../groups/group_model.dart';
+import 'download_app_banner.dart';
 
 class ContactsScreen extends StatefulWidget {
   const ContactsScreen({super.key});

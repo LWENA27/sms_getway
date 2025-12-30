@@ -14,6 +14,7 @@ import 'screens/sms_logs_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/tenant_selector_screen.dart';
 import 'screens/complete_registration_page.dart';
+import 'screens/download_app_banner.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -250,6 +251,8 @@ class _LoginPageState extends State<LoginPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // Download App Banner for web users
+            const DownloadAppBanner(),
             SizedBox(height: MediaQuery.of(context).size.height * 0.1),
             // Logo or Icon
             Container(
@@ -714,6 +717,9 @@ class _HomePageState extends State<HomePage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Download App Banner for web users
+                        const DownloadAppBanner(),
+                        const SizedBox(height: AppTheme.paddingMedium),
                         // Welcome card
                         Card(
                           child: Padding(
