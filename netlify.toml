@@ -1,0 +1,15 @@
+[build]
+  # Directory with the built Flutter web app
+  publish = "build/web"
+  
+  # Command to build the Flutter web app
+  command = "flutter build web --release"
+
+[build.environment]
+  # Flutter version
+  FLUTTER_VERSION = "3.16.0"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
