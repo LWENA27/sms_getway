@@ -1049,6 +1049,10 @@ class _ContactsScreenState extends State<ContactsScreen>
       elevation: 0,
       bottom: TabBar(
         controller: _tabController,
+        labelColor: Colors.white, // Selected tab text/icon color
+        unselectedLabelColor: Colors.white70, // Unselected tab color
+        indicatorColor: Colors.white, // Tab indicator line color
+        indicatorWeight: 3,
         tabs: const [
           Tab(icon: Icon(Icons.contacts), text: 'Contacts'),
           Tab(icon: Icon(Icons.group), text: 'Groups'),
@@ -1102,19 +1106,136 @@ class _ContactsScreenState extends State<ContactsScreen>
 
     if (contacts.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.contacts_outlined, size: 64, color: Colors.grey),
-            const SizedBox(height: 16),
-            const Text('No contacts yet'),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _addContact,
-              icon: const Icon(Icons.add),
-              label: const Text('Add Contact'),
-            ),
-          ],
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Large icon
+              Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.contacts_outlined,
+                  size: 60,
+                  color: AppTheme.primaryColor,
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Title
+              const Text(
+                'No Contacts Yet',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // Description
+              const Text(
+                'Start building your contact list to send SMS',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+
+              // Primary action - Add Contact
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _addContact,
+                  icon: const Icon(Icons.person_add),
+                  label: const Text('Add Contact Manually'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Secondary action - Import CSV
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _importCsvContacts,
+                  icon: const Icon(Icons.upload_file),
+                  label: const Text('Import from CSV'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              
+              // Tertiary action - Import VCF
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _importVcfContacts,
+                  icon: const Icon(Icons.contact_phone),
+                  label: const Text('Import from VCF/vCard'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              // Info section
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.info, color: Colors.blue, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Quick Tips',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _buildTipItem(
+                      icon: Icons.person_add,
+                      text:
+                          'Add contacts one by one with name and phone number',
+                    ),
+                    const SizedBox(height: 8),
+                    _buildTipItem(
+                      icon: Icons.upload_file,
+                      text: 'Import bulk contacts from CSV or VCF/vCard files',
+                    ),
+                    const SizedBox(height: 8),
+                    _buildTipItem(
+                      icon: Icons.group,
+                      text:
+                          'Organize contacts into groups for easier management',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -1168,6 +1289,30 @@ class _ContactsScreenState extends State<ContactsScreen>
     );
   }
 
+  Widget _buildTipItem({
+    required IconData icon,
+    required String text,
+    Color? color,
+  }) {
+    final tipColor = color ?? Colors.blue;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: tipColor),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 13,
+              color: tipColor,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildGroupsTab() {
     if (isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -1175,19 +1320,111 @@ class _ContactsScreenState extends State<ContactsScreen>
 
     if (groups.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.group_outlined, size: 64, color: Colors.grey),
-            const SizedBox(height: 16),
-            const Text('No groups yet'),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _createGroup,
-              icon: const Icon(Icons.add),
-              label: const Text('Create Group'),
-            ),
-          ],
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Large icon
+              Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.group_outlined,
+                  size: 60,
+                  color: Colors.green,
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Title
+              const Text(
+                'No Groups Yet',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // Description
+              const Text(
+                'Create groups to organize your contacts',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+
+              // Primary action - Create Group
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _createGroup,
+                  icon: const Icon(Icons.group_add),
+                  label: const Text('Create Group'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: Colors.green,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              // Info section
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.green.withOpacity(0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.info, color: Colors.green, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Benefits of Groups',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _buildTipItem(
+                      icon: Icons.folder,
+                      text:
+                          'Organize contacts by category (Family, Work, Clients)',
+                      color: Colors.green,
+                    ),
+                    const SizedBox(height: 8),
+                    _buildTipItem(
+                      icon: Icons.send,
+                      text: 'Send bulk SMS to entire groups at once',
+                      color: Colors.green,
+                    ),
+                    const SizedBox(height: 8),
+                    _buildTipItem(
+                      icon: Icons.speed,
+                      text: 'Save time with quick group selection',
+                      color: Colors.green,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }

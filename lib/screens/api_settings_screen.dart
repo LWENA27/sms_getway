@@ -82,6 +82,10 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen>
         title: const Text('API Settings'),
         bottom: TabBar(
           controller: _tabController,
+          labelColor: Colors.white, // Selected tab text/icon color
+          unselectedLabelColor: Colors.white70, // Unselected tab color
+          indicatorColor: Colors.white, // Tab indicator line color
+          indicatorWeight: 3,
           tabs: const [
             Tab(icon: Icon(Icons.key), text: 'API Keys'),
             Tab(icon: Icon(Icons.queue), text: 'Queue'),

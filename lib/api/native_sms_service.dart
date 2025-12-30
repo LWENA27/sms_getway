@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 
 class NativeSmsService {
   // Platform channel for native SMS sending
-  static const platform = MethodChannel('com.example.sms_gateway/sms');
+  static const platform = MethodChannel('com.lwenatech.sms_gateway/sms');
 
   /// Send SMS using native Android SMS functionality
   /// Returns true if SMS was sent successfully

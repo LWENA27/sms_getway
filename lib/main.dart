@@ -706,95 +706,128 @@ class _HomePageState extends State<HomePage> {
               setState(() => isLoading = false);
             },
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(AppTheme.paddingLarge),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Welcome card
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(AppTheme.paddingLarge),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Welcome! 👋',
-                            style: Theme.of(context).textTheme.headlineSmall,
-                          ),
-                          const SizedBox(
-                            height: AppTheme.paddingSmall,
-                          ),
-                          Text(
-                            currentTenantName ?? 'Workspace',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  color: AppTheme.primaryColor,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1200),
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppTheme.paddingLarge),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Welcome card
+                        Card(
+                          child: Padding(
+                            padding:
+                                const EdgeInsets.all(AppTheme.paddingLarge),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Welcome! 👋',
+                                  style:
+                                      Theme.of(context).textTheme.headlineSmall,
                                 ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            currentUserName?.isNotEmpty == true
-                                ? currentUserName!
-                                : (currentUserEmail ?? 'User'),
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(
-                                  color: Colors.grey[600],
+                                const SizedBox(
+                                  height: AppTheme.paddingSmall,
                                 ),
+                                Text(
+                                  currentTenantName ?? 'Workspace',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        color: AppTheme.primaryColor,
+                                      ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  currentUserName?.isNotEmpty == true
+                                      ? currentUserName!
+                                      : (currentUserEmail ?? 'User'),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(
+                                        color: Colors.grey[600],
+                                      ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(height: AppTheme.paddingLarge),
+                        // Statistics
+                        Text(
+                          'Quick Stats',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: AppTheme.paddingMedium),
+                        // Responsive grid that adapts to screen size
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            // Calculate responsive columns
+                            int crossAxisCount = 2; // Default for mobile
+                            double childAspectRatio = 1.0;
+
+                            if (constraints.maxWidth > 1200) {
+                              // Large desktop
+                              crossAxisCount = 4;
+                              childAspectRatio = 1.3;
+                            } else if (constraints.maxWidth > 800) {
+                              // Tablet/small desktop
+                              crossAxisCount = 3;
+                              childAspectRatio = 1.2;
+                            } else if (constraints.maxWidth > 600) {
+                              // Large phone/small tablet
+                              crossAxisCount = 2;
+                              childAspectRatio = 1.1;
+                            }
+
+                            return GridView.count(
+                              crossAxisCount: crossAxisCount,
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              mainAxisSpacing: AppTheme.paddingMedium,
+                              crossAxisSpacing: AppTheme.paddingMedium,
+                              childAspectRatio: childAspectRatio,
+                              children: [
+                                _buildStatCard(
+                                  context,
+                                  icon: Icons.contacts,
+                                  label: 'Contacts',
+                                  value: '$contactCount',
+                                  color: Colors.blue,
+                                ),
+                                _buildStatCard(
+                                  context,
+                                  icon: Icons.group,
+                                  label: 'Groups',
+                                  value: '$groupCount',
+                                  color: Colors.green,
+                                ),
+                                _buildStatCard(
+                                  context,
+                                  icon: Icons.mail,
+                                  label: 'SMS Logs',
+                                  value: '$smsLogCount',
+                                  color: Colors.orange,
+                                ),
+                                _buildStatCard(
+                                  context,
+                                  icon: Icons.info,
+                                  label: 'Status',
+                                  value: 'Active',
+                                  color: Colors.purple,
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: AppTheme.paddingLarge),
-                  // Statistics
-                  Text(
-                    'Quick Stats',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: AppTheme.paddingMedium),
-                  GridView.count(
-                    crossAxisCount: 2,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    mainAxisSpacing: AppTheme.paddingMedium,
-                    crossAxisSpacing: AppTheme.paddingMedium,
-                    children: [
-                      _buildStatCard(
-                        context,
-                        icon: Icons.contacts,
-                        label: 'Contacts',
-                        value: '$contactCount',
-                        color: Colors.blue,
-                      ),
-                      _buildStatCard(
-                        context,
-                        icon: Icons.group,
-                        label: 'Groups',
-                        value: '$groupCount',
-                        color: Colors.green,
-                      ),
-                      _buildStatCard(
-                        context,
-                        icon: Icons.mail,
-                        label: 'SMS Logs',
-                        value: '$smsLogCount',
-                        color: Colors.orange,
-                      ),
-                      _buildStatCard(
-                        context,
-                        icon: Icons.info,
-                        label: 'Status',
-                        value: 'Active',
-                        color: Colors.purple,
-                      ),
-                    ],
-                  ),
-                ],
+                ),
               ),
             ),
           );

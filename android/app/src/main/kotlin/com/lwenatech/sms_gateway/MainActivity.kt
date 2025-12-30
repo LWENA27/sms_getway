@@ -1,4 +1,4 @@
-package com.example.sms_gateway
+package com.lwenatech.sms_gateway
 
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -16,7 +16,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val CHANNEL = "com.example.sms_gateway/sms"
+    private val CHANNEL = "com.lwenatech.sms_gateway/sms"
     private val SMS_SENT = "SMS_SENT"
     private val SMS_DELIVERED = "SMS_DELIVERED"
     private var sentCount = 0

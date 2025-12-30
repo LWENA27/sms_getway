@@ -1,5 +1,5 @@
 name: sms_gateway
-description: Professional SMS Gateway Mobile Application
+description: Professional SMS Gateway for bulk SMS management with multi-tenant support
 publish_to: 'none'
 
 version: 1.0.0+1
