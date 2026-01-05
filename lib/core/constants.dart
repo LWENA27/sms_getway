@@ -3,10 +3,24 @@ library;
 
 class AppConstants {
   // ===== SUPABASE CONFIGURATION =====
-  // PRODUCTION (Remote Supabase)
-  static const String supabaseUrl = 'https://kzjgdeqfmxkmpmadtbpb.supabase.co';
-  static const String supabaseAnonKey =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6amdkZXFmbXhrbXBtYWR0YnBiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkyOTk3NjQsImV4cCI6MjA2NDg3NTc2NH0.NTEzbvVCQ_vNTJPS5bFPSOm5XNRjUrFpSUPEWQDm434';
+  // By default the app will use the production Supabase values below. For
+  // local development you can override these at runtime using `--dart-define`.
+  // Example:
+  // flutter run -d chrome \
+  //   --dart-define=SUPABASE_URL=http://127.0.0.1:54321 \
+  //   --dart-define=SUPABASE_ANON_KEY=sb_publishable_...
+
+  // PRODUCTION (Remote Supabase) - fallback values
+  static const String supabaseUrl = String.fromEnvironment(
+    'SUPABASE_URL',
+    defaultValue: 'https://kzjgdeqfmxkmpmadtbpb.supabase.co',
+  );
+
+  static const String supabaseAnonKey = String.fromEnvironment(
+    'SUPABASE_ANON_KEY',
+    defaultValue:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6amdkZXFmbXhrbXBtYWR0YnBiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkyOTk3NjQsImV4cCI6MjA2NDg3NTc2NH0.NTEzbvVCQ_vNTJPS5bFPSOm5XNRjUrFpSUPEWQDm434',
+  );
 
   // LOCAL DEVELOPMENT (use this while developing)
   // static const String supabaseUrl = 'http://127.0.0.1:54321';

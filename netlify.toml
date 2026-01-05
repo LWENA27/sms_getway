@@ -1,3 +1,18 @@
+# Netlify configuration for Flutter Web deployment
+# Publishes the Flutter build output and rewrites all routes to index.html
+
+[build]
+  # Build command Netlify will run to produce static assets
+  command = "flutter build web --release"
+  # Directory that contains the publishable site
+  publish = "build/web"
+
+[[redirects]]
+  # SPA fallback: serve index.html for all client-side routes
+  from = "/*"
+  to = "/index.html"
+  status = 200
+  force = true
 [build]
   # Directory with the built Flutter web app
   publish = "build/web"
