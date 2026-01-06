@@ -205,6 +205,16 @@ After deploy, test at `https://smsgetway.techwareafrica.tech`:
 
 ## 🔍 Troubleshooting
 
+### Build Fails: "Build script returned non-zero exit code"
+- **Cause**: Netlify trying to build Flutter directly (Flutter not in build environment)
+- **Solution**: ✅ Fixed! GitHub Actions now handles build and deployment
+- **How it works**: 
+  1. Push to `main` branch
+  2. GitHub Actions builds Flutter web with secrets
+  3. Actions deploy built files to Netlify
+  4. Netlify just serves the static files
+- **Verify**: Check `.github/workflows/deploy-netlify.yml` exists and GitHub Secrets are configured
+
 ### Build Fails: "flutter: command not found"
 - **Solution**: Use GitHub Actions (already configured) or manual deploy
 - Netlify build image doesn't have Flutter by default
