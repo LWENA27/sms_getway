@@ -4,12 +4,23 @@ Deploy SMS Gateway Pro web admin to **smsgetway.techwareafrica.tech**
 
 ---
 
+## ⚡ Quick Summary
+
+This project uses **GitHub Actions** for automated build and deployment to Netlify:
+- ✅ Push to `main` branch → GitHub Actions builds Flutter web → Deploys to Netlify
+- ✅ No manual builds needed
+- ✅ Environment variables handled securely via GitHub Secrets
+- ✅ Automatic deployment on every commit
+
+---
+
 ## 📋 Prerequisites
 
 1. **GitHub Repository**: Code pushed to `LWENA27/sms_getway`
 2. **Netlify Account**: Signed up at [netlify.com](https://netlify.com)
 3. **Domain Access**: DNS control for `techwareafrica.tech`
 4. **Supabase Project**: Production or local instance running
+5. **GitHub Secrets Configured**: NETLIFY_AUTH_TOKEN, NETLIFY_SITE_ID, SUPABASE_URL, SUPABASE_ANON_KEY
 
 ---
 
@@ -23,9 +34,10 @@ Deploy SMS Gateway Pro web admin to **smsgetway.techwareafrica.tech**
 3. Choose "GitHub" and authorize Netlify
 4. Select repository: `LWENA27/sms_getway`
 5. **Build settings**:
-   - **Build command**: Leave empty (we'll use GitHub Actions)
+   - **Build command**: `echo 'Build is handled by GitHub Actions' && ls -la`
    - **Publish directory**: `build/web`
    - **Branch**: `main`
+   - ⚠️ **Important**: Netlify won't build; GitHub Actions will deploy built files
 6. Click "Deploy site"
 
 **Option B: Manual Deploy (Quick Test)**

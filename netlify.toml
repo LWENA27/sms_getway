@@ -1,17 +1,20 @@
 # Netlify configuration for Flutter Web App
 # SMS Gateway Pro - Web Admin Panel
+#
+# NOTE: This project uses GitHub Actions for building and deploying.
+# See .github/workflows/deploy-netlify.yml for the build pipeline.
+# Netlify's build command is disabled because GitHub Actions handles it.
 
 [build]
-  # Build command - note: Flutter must be installed in build environment
-  # For now, build locally and deploy the build/web directory
-  command = "echo 'Please build Flutter web locally: flutter build web --release' && exit 1"
+  # Build handled by GitHub Actions - skip Netlify build
+  command = "echo 'Build is handled by GitHub Actions' && ls -la"
   
-  # Directory with the built Flutter web app
+  # Directory with the built Flutter web app (deployed by GitHub Actions)
   publish = "build/web"
   
-  # Environment variables (set these in Netlify UI)
-  # SUPABASE_URL=http://127.0.0.1:54321 (or production URL)
-  # SUPABASE_ANON_KEY=sb_publishable_...
+  # Environment variables are set in GitHub Secrets, not here
+  # SUPABASE_URL - Set in GitHub repository secrets
+  # SUPABASE_ANON_KEY - Set in GitHub repository secrets
 
 # SPA routing - redirect all requests to index.html
 [[redirects]]
