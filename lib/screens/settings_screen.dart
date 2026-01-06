@@ -280,7 +280,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 controller: contactController,
                 decoration: const InputDecoration(
                   labelText: 'Contact Phone Number *',
-                  hintText: '+1234567890',
+                  hintText: '+255683274343',
                   prefixIcon: Icon(Icons.phone),
                 ),
                 keyboardType: TextInputType.phone,

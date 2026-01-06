@@ -1,8 +1,30 @@
+# Netlify configuration for Flutter Web App
+# SMS Gateway Pro - Web Admin Panel
+
 [build]
+  # Build command - note: Flutter must be installed in build environment
+  # For now, build locally and deploy the build/web directory
+  command = "echo 'Please build Flutter web locally: flutter build web --release' && exit 1"
+  
   # Directory with the built Flutter web app
   publish = "build/web"
+  
+  # Environment variables (set these in Netlify UI)
+  # SUPABASE_URL=http://127.0.0.1:54321 (or production URL)
+  # SUPABASE_ANON_KEY=sb_publishable_...
 
+# SPA routing - redirect all requests to index.html
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
+  force = false
+
+# Security headers
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(), microphone=(), camera=()"

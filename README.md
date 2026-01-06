@@ -1,23 +1,28 @@
 # 📱 SMS Gateway Pro
 
-**Professional Bulk SMS Management System**
+**Professional Multi-Tenant SMS Management System**
 
-A multi-tenant SMS gateway application for bulk messaging with enterprise-grade features. Built with Flutter and Supabase, enabling organizations to send SMS through their Android phones with complete data isolation.
+A production-ready, enterprise-grade SMS gateway application for bulk messaging with complete data isolation. Built with Flutter and Supabase, enabling organizations to send SMS through Android devices or REST API with multi-tenant architecture.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Flutter](https://img.shields.io/badge/Flutter-3.0+-02569B?logo=flutter)](https://flutter.dev)
-[![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?logo=supabase)](https://supabase.com)
-[![GitHub Release](https://img.shields.io/badge/Release-v1.0.0-brightgreen)](https://github.com/LWENA27/sms_getway/releases)
+[![Flutter](https://img.shields.io/badge/Flutter-3.24.5-02569B?logo=flutter)](https://flutter.dev)
+[![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL_15-3ECF8E?logo=supabase)](https://supabase.com)
+[![Version](https://img.shields.io/badge/Version-1.0.0-brightgreen)](https://github.com/LWENA27/sms_getway/releases)
 
 ---
 
-## 🎯 Download & Install Now!
+## 🚀 Quick Links
 
-### 👉 [📥 **CLICK HERE TO DOWNLOAD THE APP**](GET_APP.md)
-
-**Super easy!** No coding needed. Just download the APK file and install on your Android phone in 3 steps.
-
-> **Version**: 1.0.0 | **Size**: ~60 MB | **Requires**: Android 5.0+
+| Documentation | Purpose |
+|---------------|---------|
+| **[🗄️ Database & Architecture](SUPABASE.md)** | Multi-tenant database schema and architecture |
+| **[🚀 Features & Roadmap](ROADMAP.md)** | Current features and future plans |
+| **[📡 API Documentation](API_DOCUMENTATION.md)** | REST API integration guide |
+| **[💻 Developer Guide](DEVELOPER.md)** | Technical documentation and patterns |
+| **[👨‍💻 Developer Onboarding](DEVELOPER_ONBOARDING.md)** | Setup guide for new developers |
+| **[🌐 Netlify Deployment](NETLIFY_DEPLOYMENT.md)** | Deploy web admin to smsgetway.techwareafrica.tech |
+| **[📦 Release Checklist](RELEASE_CHECKLIST.md)** | Mobile app release process |
+| **[🗄️ Supabase Schema](SUPABASE.md)** | SMS Gateway database schema |
 
 ---
 
@@ -90,13 +95,15 @@ flutter run
 
 **That's it!** The app will build and launch on your Android device.
 
-👉 **[See QUICKSTART.md for detailed quick start guide](QUICKSTART.md)**
+👉 **[See DEVELOPER_ONBOARDING.md for detailed setup guide](DEVELOPER_ONBOARDING.md)**
 
-### 📚 Full Installation Guide
+### 📚 Full Installation & Development Guide
 
-For detailed setup instructions with troubleshooting:
+For detailed setup instructions, database architecture, and development workflow:
 
-👉 **[See INSTALLATION.md for complete setup guide](INSTALLATION.md)**
+👉 **[See DEVELOPER_ONBOARDING.md for complete setup guide](DEVELOPER_ONBOARDING.md)**
+👉 **[See DEVELOPER.md for technical documentation](DEVELOPER.md)**
+👉 **[See SUPABASE.md for database schema and multi-tenant architecture](SUPABASE.md)**
 
 ### 🔗 Download Options
 
@@ -358,7 +365,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey)
             <div class="form-group">
                 <label for="phone">Phone Number *</label>
                 <input type="tel" id="phone" name="phone" required 
-                       placeholder="+1234567890">
+                       placeholder="+255683274343">
             </div>
             
             <div class="form-group">
@@ -555,7 +562,7 @@ form.addEventListener('submit', async (e) => {
     }
 
     if (!validatePhone(phone)) {
-        showError('Please enter a valid phone number with country code (e.g., +1234567890)')
+        showError('Please enter a valid phone number with country code (e.g., +255683274343)')
         return
     }
 
@@ -642,7 +649,7 @@ WITH CHECK (auth.uid() = user_id);
 2. **Fill in the form** with valid data:
    - Name: John Doe
    - Email: john@example.com
-   - Phone: +1234567890
+   - Phone: +255683274343
    - Company: My Business Inc
    - Password: securepassword123
 3. **Click "Create Account"**

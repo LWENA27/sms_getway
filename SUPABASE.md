@@ -4,7 +4,63 @@ This document describes the database architecture for SMS Gateway Pro.
 
 ---
 
-## 📊 Overview
+## � Quick Start: Local Development
+
+### Running Against Local Supabase
+
+Your local Supabase instance is running at:
+- **Project URL**: `http://127.0.0.1:54321`
+- **Studio**: `http://127.0.0.1:54323`
+- **Database**: `postgresql://postgres:postgres@127.0.0.1:54322/postgres`
+- **Anon Key**: `sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH`
+
+### Run Flutter App with Local Supabase
+
+**Web (Chrome)**:
+```bash
+flutter run -d chrome \
+  --dart-define=SUPABASE_URL=http://127.0.0.1:54321 \
+  --dart-define=SUPABASE_ANON_KEY=sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
+```
+
+**Android** (use host IP, not 127.0.0.1):
+```bash
+# Find your host IP: ip addr show | grep inet
+flutter run -d <device-id> \
+  --dart-define=SUPABASE_URL=http://192.168.1.10:54321 \
+  --dart-define=SUPABASE_ANON_KEY=sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
+```
+
+**Build for Production** (uses production Supabase):
+```bash
+flutter build web --release
+# Uses default values from lib/core/constants.dart
+```
+
+### Local Supabase Management
+
+**Start Supabase**:
+```bash
+cd ~/techwareafricaadimn
+supabase start
+```
+
+**Stop Supabase**:
+```bash
+supabase stop
+```
+
+**Check Status**:
+```bash
+supabase status
+```
+
+**Access Studio** (GUI for database):
+Open `http://127.0.0.1:54323` in browser
+
+---
+
+## �📊 Overview
 
 SMS Gateway uses a **multi-tenant, multi-product SaaS architecture** with PostgreSQL schemas for complete data isolation.
 
@@ -529,6 +585,84 @@ SELECT schemaname, tablename, policyname
 FROM pg_policies 
 WHERE schemaname = 'sms_gateway';
 ```
+
+---
+
+## 📞 Sender ID Management Feature
+
+### Overview
+The Sender ID Management feature allows customers to request custom Sender IDs for their SMS messages. A Sender ID is the name that appears as the sender of an SMS (e.g., "MYBANK", "ACME", "ALERT").
+
+### Database Schema: `sender_id_requests`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid | Primary key |
+| `tenant_id` | uuid | Tenant who requested |
+| `user_id` | uuid | User who submitted request |
+| `sender_id` | varchar(11) | Requested Sender ID (max 11 alphanumeric) |
+| `business_name` | varchar(255) | Business name |
+| `purpose` | text | Purpose of use |
+| `contact_phone` | varchar(20) | Contact number |
+| `status` | varchar(20) | pending/approved/rejected/active |
+| `admin_notes` | text | Admin comments |
+| `reviewed_by` | uuid | Admin who reviewed |
+| `reviewed_at` | timestamp | Review timestamp |
+| `created_at` | timestamp | Request creation time |
+| `updated_at` | timestamp | Last update time |
+
+### User Flow
+
+1. **Request Sender ID**: Navigate to Settings → Sender ID Management
+2. **Admin Review**: Request goes to admin for approval (1-2 business days)
+3. **Status Updates**: pending → approved → active
+4. **Use Sender ID**: Once active, configure in SMS settings
+
+### Setup
+
+Run migration in Supabase SQL Editor:
+```sql
+-- See database/sender_id_requests_table.sql
+CREATE TABLE sms_gateway.sender_id_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid REFERENCES sms_gateway.tenants(id) ON DELETE CASCADE,
+  user_id uuid REFERENCES sms_gateway.users(id) ON DELETE SET NULL,
+  sender_id varchar(11) NOT NULL,
+  business_name varchar(255) NOT NULL,
+  purpose text NOT NULL,
+  contact_phone varchar(20) NOT NULL,
+  status varchar(20) DEFAULT 'pending',
+  admin_notes text,
+  reviewed_by uuid,
+  reviewed_at timestamp,
+  created_at timestamp DEFAULT now(),
+  updated_at timestamp DEFAULT now()
+);
+
+-- Enable RLS
+ALTER TABLE sms_gateway.sender_id_requests ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Users can view their tenant's requests
+CREATE POLICY "Users can view tenant sender ID requests"
+  ON sms_gateway.sender_id_requests FOR SELECT
+  USING (tenant_id IN (
+    SELECT tenant_id FROM sms_gateway.tenant_members WHERE user_id = auth.uid()
+  ));
+
+-- Policy: Users can create requests for their tenant
+CREATE POLICY "Users can create sender ID requests"
+  ON sms_gateway.sender_id_requests FOR INSERT
+  WITH CHECK (tenant_id IN (
+    SELECT tenant_id FROM sms_gateway.tenant_members WHERE user_id = auth.uid()
+  ));
+```
+
+### Technical Notes
+- Sender IDs limited to 11 characters (telecom standard)
+- Alphanumeric only (A-Z, 0-9)
+- Case-insensitive (stored as uppercase)
+- Requires admin approval for security
+- RLS ensures tenant isolation
 
 ---
 

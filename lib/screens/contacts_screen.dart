@@ -888,7 +888,7 @@ class _ContactsScreenState extends State<ContactsScreen>
 
   /// Extract value from VCF line (handles various formats)
   String _extractVcfValue(String line) {
-    // Handle lines like "TEL;TYPE=CELL:+1234567890" or "FN:John Doe"
+    // Handle lines like "TEL;TYPE=CELL:+255683274343" or "FN:John Doe"
     final colonIndex = line.indexOf(':');
     if (colonIndex == -1) return line;
     return line.substring(colonIndex + 1).trim();

@@ -779,7 +779,7 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen>
           const SizedBox(height: 8),
           _buildCodeBlock('''
 {
-  "phone_number": "+1234567890",
+  "phone_number": "+255683274343",
   "message": "Hello from API!",
   "external_id": "order-123",
   "priority": 0
@@ -798,7 +798,7 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen>
           _buildCodeBlock('''
 {
   "phone_numbers": [
-    "+1234567890",
+    "+255683274343",
     "+0987654321"
   ],
   "message": "Hello from API!",
@@ -820,7 +820,7 @@ class _ApiSettingsScreenState extends State<ApiSettingsScreen>
 {
   "success": true,
   "request_id": "uuid",
-  "phone_number": "+1234567890",
+  "phone_number": "+255683274343",
   "status": "sent",
   "created_at": "2025-12-23T10:00:00Z",
   "processed_at": "2025-12-23T10:00:05Z"

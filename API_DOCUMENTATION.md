@@ -35,7 +35,7 @@ Send a single SMS message.
 **Request Body:**
 ```json
 {
-  "phone_number": "+1234567890",
+  "phone_number": "+255683274343",
   "message": "Hello from API!",
   "external_id": "order-123",
   "priority": 0,
@@ -78,7 +78,7 @@ Send the same message to multiple recipients.
 ```json
 {
   "phone_numbers": [
-    "+1234567890",
+    "+25568327434343",
     "+0987654321",
     "+1122334455"
   ],
@@ -125,7 +125,7 @@ Check the status of a specific SMS request.
 {
   "success": true,
   "request_id": "550e8400-e29b-41d4-a716-446655440000",
-  "phone_number": "+1234567890",
+  "phone_number": "+25568327434343",
   "status": "sent",
   "external_id": "order-123",
   "created_at": "2025-12-23T10:00:00Z",
@@ -191,7 +191,7 @@ curl -X POST "https://YOUR_PROJECT.supabase.co/functions/v1/sms-api/send" \
   -H "Content-Type: application/json" \
   -H "x-api-key: sgw_your_api_key_here" \
   -d '{
-    "phone_number": "+1234567890",
+    "phone_number": "+255683274343",
     "message": "Hello from API!"
   }'
 
@@ -200,7 +200,7 @@ curl -X POST "https://YOUR_PROJECT.supabase.co/functions/v1/sms-api/bulk" \
   -H "Content-Type: application/json" \
   -H "x-api-key: sgw_your_api_key_here" \
   -d '{
-    "phone_numbers": ["+1234567890", "+0987654321"],
+    "phone_numbers": ["+255683274343", "+0987654321"],
     "message": "Hello everyone!"
   }'
 
