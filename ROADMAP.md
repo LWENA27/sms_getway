@@ -23,13 +23,14 @@ A **distributed, SIM-based messaging platform** that allows organizations to sen
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  PHASE 1: Local SMS Gateway                         ✅ COMPLETE         │
 ├─────────────────────────────────────────────────────────────────────────┤
-│  PHASE 2: Connected & API-Enabled Gateway           ✅ COMPLETE         │
+│  PHASE 2: Connected & API-Enabled Gateway           🔄 CORE COMPLETE    │
 │  ├── 2.1 Organization & Authentication              ✅ COMPLETE         │
-│  ├── 2.2 Backend & Sync Layer                       ✅ COMPLETE         │
+│  ├── 2.2 Backend & Sync Layer                       🔄 PARTIAL          │
 │  ├── 2.3 API-Triggered SMS                          ✅ COMPLETE         │
 │  ├── 2.4 API Security & Control                     ✅ COMPLETE         │
-│  ├── 2.5 Provider / Sender ID Integration           🔲 PLANNED          │
-│  └── 2.6 Settings Backup & Cross-Device Sync        ✅ COMPLETE         │
+│  ├── 2.5 Revenue Enablement (Sender ID)             🔲 PLANNED          │
+│  ├── 2.6 Settings Backup & Cross-Device Sync        ✅ COMPLETE         │
+│  └── 2.7 Marketing Automation Engine                🔄 IN PROGRESS      │
 ├─────────────────────────────────────────────────────────────────────────┤
 │  PHASE 3: Scale & Enterprise Features               📋 PLANNED          │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -73,7 +74,42 @@ User → App UI → Android SmsManager → Phone SIM → Recipient
 
 ---
 
-## ✅ Phase 2: Connected & API-Enabled Gateway (COMPLETE)
+## ✅ Phase 2: Connected & API-Enabled Gateway (CORE COMPLETE)
+
+**Note:** Core features complete. Offline-first sync pending.
+
+---
+
+### 📊 Data Ownership & Sync Policy
+
+**Source of Truth Rules:**
+
+| Data Type | Source of Truth | Sync Direction | Notes |
+|-----------|----------------|----------------|-------|
+| **Campaign Definitions** | Supabase | Cloud → Device | Always pull from cloud |
+| **API-Triggered SMS** | Supabase | Cloud → Device | Requires internet |
+| **Marketing Analytics** | Supabase | Cloud ← Device | Device pushes logs |
+| **Offline SMS Sends** | Local SQLite | Device → Cloud | Append-only sync |
+| **WorkManager Jobs** | Local SQLite | Device only | Ephemeral state |
+| **Daily Counters** | Local SQLite | Device → Cloud | Synced hourly |
+
+**Conflict Resolution:**
+```
+├── Local logs always sync UP to Supabase (append-only, no conflicts)
+├── Campaign state always pulled DOWN from Supabase (cloud is truth)
+├── Settings: Last-write-wins (timestamped)
+└── Counters: Supabase aggregates from all devices
+```
+
+**When Offline:**
+```
+✅ Can send: Manual SMS, queued campaigns
+✅ Can create: Contacts, groups, draft campaigns
+❌ Cannot: Activate campaigns, pull new API requests
+📤 Auto-syncs when connection restored
+```
+
+---
 
 ### 🔸 Phase 2.1 – Organization & Authentication ✅ COMPLETE
 
@@ -223,15 +259,21 @@ Content-Type: application/json
 
 ---
 
-### 🔸 Phase 2.5 – Provider / Sender ID Integration (Optional)
+### 🔸 Phase 2.5 – Revenue Enablement (Sender ID Integration) 🔲 PLANNED
 
-**Objective:** Support internet-based SMS providers for branded Sender ID.
+**Objective:** Support internet-based SMS providers for branded Sender ID and revenue generation.
+
+**Commercial Value:**
+- 🏢 Branded Sender ID (e.g., "MYSCHOOL" instead of phone number)
+- � White-label reselling opportunity
+- 📊 High-volume enterprise clients
+- 🌍 International SMS delivery
 
 **Use Cases:**
-- 🏢 Branded Sender ID (e.g., "MYSCHOOL" instead of phone number)
-- 💳 No SIM balance / SIM not available
-- 📊 High-volume campaigns
-- 📋 Regulatory requirements
+- �💳 No SIM balance / SIM not available
+- � Regulatory requirements (some countries require Sender ID)
+- 🏢 Corporate branding requirements
+- 📈 Campaigns exceeding device capacity
 
 **Channel Selection:**
 
@@ -306,6 +348,660 @@ Device B:
 
 ---
 
+### 🔸 Phase 2.7 – Marketing Automation Engine 🔄 IN PROGRESS
+
+**Objective:** Enable controlled, ethical, and rate-limited SMS marketing campaigns using organization's own Android SIM cards.
+
+**Status:** Q1 2026 - In Development
+
+**Terminology Note:** Previously called "Auto Marketing Engine" - standardized to "Marketing Automation Engine" for enterprise positioning.
+
+---
+
+#### 📊 Overview
+
+Enable organizations to run automated SMS marketing campaigns through their Android devices with strict anti-spam controls and ethical sending practices.
+
+**Core Architecture:**
+```
+Web/Android UI → Campaign Creation → WorkManager (Android) → SIM → Recipients
+                       ↓                        ↓
+                 Supabase Sync          Rate Limiting + Logging
+```
+
+**Key Principles:**
+- ✅ Tenant-scoped (per-organization)
+- ✅ Opt-in only (disabled by default)
+- ✅ Strict frequency limits
+- ✅ Battery-efficient execution
+- ✅ Full user control and transparency
+
+---
+
+#### ✅ Features Specification
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **Campaign Management** | 🔄 | Create, edit, activate multiple campaigns |
+| **Contact Sources** | 🔄 | CSV import, phonebook sync, existing contacts |
+| **Message Templates** | 🔄 | Save multiple templates with dynamic fields |
+| **Dynamic Personalization** | 🔄 | {first_name}, {last_name}, {phone} merge fields |
+| **Daily Sending Limit** | 🔄 | Max 100 SMS/day per tenant |
+| **Per-Number Frequency** | 🔄 | Max 2 SMS per 30 days (rolling window) |
+| **Rate Limiting** | 🔄 | 2 SMS/minute with randomized delays |
+| **Opt-Out Management** | 🔄 | Manual blacklist via UI |
+| **Web + Android Sync** | 🔄 | Create campaigns on web, execute on Android |
+| **Campaign Analytics** | 🔄 | Sent, pending, failed, opted-out tracking |
+| **WorkManager Integration** | 🔄 | Background execution with battery optimization |
+
+---
+
+#### 🛡️ Anti-Spam Safeguards
+
+**Hard Limits (Enforced at Database Level):**
+
+| Rule | Limit | Enforcement |
+|------|-------|-------------|
+| Daily SMS per Tenant | 100 SMS | Resets at 00:00 local time |
+| SMS per Number (30-day) | 2 SMS | Rolling 30-day window |
+| Send Rate | 2 SMS/min | Programmatic delay (30-60 sec) |
+| Campaign Pause | Automatic | When daily limit reached |
+
+**User Controls:**
+- ✅ Global kill switch (disable instantly)
+- ✅ Campaign-level enable/disable
+- ✅ Preview before activation
+- ✅ Real-time quota display
+- ✅ Manual blacklist management
+
+---
+
+#### 🗄️ Database Schema
+
+**New Tables:**
+
+```sql
+-- Campaign definitions
+CREATE TABLE sms_gateway.marketing_campaigns (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES sms_gateway.tenants(id),
+  name VARCHAR(100) NOT NULL,
+  message_template TEXT NOT NULL,
+  status VARCHAR(20) DEFAULT 'draft', -- draft, active, paused, completed
+  daily_sent_count INTEGER DEFAULT 0,
+  total_sent_count INTEGER DEFAULT 0,
+  total_contact_count INTEGER DEFAULT 0,
+  created_by UUID REFERENCES sms_gateway.users(id),
+  created_at TIMESTAMP DEFAULT now(),
+  activated_at TIMESTAMP,
+  completed_at TIMESTAMP
+);
+
+-- Campaign contacts (junction table)
+CREATE TABLE sms_gateway.marketing_campaign_contacts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  campaign_id UUID NOT NULL REFERENCES sms_gateway.marketing_campaigns(id),
+  contact_id UUID REFERENCES sms_gateway.contacts(id),
+  phone_number VARCHAR(20) NOT NULL,
+  first_name VARCHAR(100),
+  last_name VARCHAR(100),
+  status VARCHAR(20) DEFAULT 'pending', -- pending, sent, failed, skipped
+  sent_at TIMESTAMP,
+  failure_reason TEXT
+);
+
+-- Tenant marketing settings
+CREATE TABLE sms_gateway.marketing_settings (
+  tenant_id UUID PRIMARY KEY REFERENCES sms_gateway.tenants(id),
+  enabled BOOLEAN DEFAULT false,
+  daily_limit INTEGER DEFAULT 100,
+  per_number_limit INTEGER DEFAULT 2,
+  per_number_days INTEGER DEFAULT 30,
+  send_interval_seconds INTEGER DEFAULT 45,
+  last_reset_date DATE DEFAULT CURRENT_DATE,
+  created_at TIMESTAMP DEFAULT now(),
+  updated_at TIMESTAMP DEFAULT now()
+);
+
+-- Frequency tracker (30-day rolling window) - EVENT-BASED
+CREATE TABLE sms_gateway.marketing_frequency_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES sms_gateway.tenants(id),
+  phone_number VARCHAR(20) NOT NULL,
+  campaign_id UUID REFERENCES sms_gateway.marketing_campaigns(id),
+  sent_at TIMESTAMP NOT NULL DEFAULT now(),
+  message_preview TEXT, -- First 50 chars for audit
+  INDEX idx_frequency_lookup (tenant_id, phone_number, sent_at)
+);
+
+-- Query to check frequency (accurate rolling window):
+-- SELECT COUNT(*) FROM marketing_frequency_events
+-- WHERE tenant_id = ? AND phone_number = ?
+--   AND sent_at >= NOW() - INTERVAL '30 days';
+
+-- Opt-out blacklist
+CREATE TABLE sms_gateway.marketing_optouts (
+  phone_number VARCHAR(20) NOT NULL,
+  tenant_id UUID NOT NULL REFERENCES sms_gateway.tenants(id),
+  opted_out_at TIMESTAMP DEFAULT now(),
+  method VARCHAR(20) DEFAULT 'manual', -- manual, admin
+  notes TEXT,
+  PRIMARY KEY (phone_number, tenant_id)
+);
+
+-- Campaign execution logs
+CREATE TABLE sms_gateway.marketing_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  campaign_id UUID NOT NULL REFERENCES sms_gateway.marketing_campaigns(id),
+  tenant_id UUID NOT NULL REFERENCES sms_gateway.tenants(id),
+  phone_number VARCHAR(20) NOT NULL,
+  message TEXT NOT NULL,
+  status VARCHAR(20) NOT NULL, -- sent, failed
+  sent_at TIMESTAMP DEFAULT now(),
+  failure_reason TEXT
+);
+```
+
+---
+
+#### 🔄 Workflow & Execution
+
+**Campaign Creation Flow:**
+```
+1. User (Web/Android) → Create Campaign
+2. Set name, message template with {first_name}, {last_name}, {phone}
+3. Select contacts:
+   ├── From existing SMS Gateway contacts
+   ├── Import from CSV
+   ├── Import from phone contacts (Android only)
+   └── Manual entry
+4. Preview rendered messages
+5. Save as draft or activate immediately
+6. Campaign stored in Supabase
+```
+
+**Campaign Execution (Android WorkManager):**
+```
+1. CampaignCheckWorker runs every 30 minutes (PeriodicWorkRequest)
+2. Check: marketing_settings.enabled = true
+3. Check: daily_sent_count < daily_limit
+4. Fetch active campaigns with pending contacts (batch of 10)
+5. For each contact, schedule OneTimeWorkRequest:
+   ├── Calculate staggered delay (30-60 sec * index)
+   ├── Create SendMarketingSmsWorker with contact data
+   ├── Set initial delay for rate limiting
+   └── Enqueue worker with tag "marketing_sms"
+6. SendMarketingSmsWorker executes per contact:
+   ├── Final checks (opt-out, frequency, daily limit)
+   ├── Render template: "Hi {first_name}" → "Hi John"
+   ├── Send SMS via SmsManager
+   ├── Log to marketing_logs
+   ├── Insert marketing_frequency_events record
+   ├── Update campaign_contacts.status = 'sent'
+   └── Sync logs to Supabase (async)
+7. System automatically handles:
+   ├── Battery optimization (no wake locks)
+   ├── Device reboot (work persisted)
+   ├── Rate limiting (via delayed workers)
+   └── Retry on failure (WorkManager built-in)
+```
+
+**Daily Reset Logic:**
+```
+Daily at 00:00 device time:
+├── Reset marketing_settings.daily_sent_count = 0
+└── Reset marketing_campaigns.daily_sent_count = 0
+```
+
+**30-Day Frequency Check:**
+```sql
+-- Before sending, check (accurate rolling window):
+SELECT COUNT(*) FROM marketing_frequency_events
+WHERE phone_number = '+255...'
+  AND tenant_id = 'xxx'
+  AND sent_at >= NOW() - INTERVAL '30 days';
+  
+-- If count >= 2, skip this number
+-- This event-based design ensures accuracy and auditability
+```
+
+---
+
+#### 🎨 User Interface
+
+**Web Platform (Campaign Management):**
+```
+Settings → Marketing Automation
+├── Enable/Disable Toggle
+├── Daily Limit Display (75/100 sent today)
+├── Campaign List
+│   ├── [+ New Campaign]
+│   ├── Campaign Card:
+│   │   ├── Name: "Spring Sale 2026"
+│   │   ├── Status: Active | Draft | Paused
+│   │   ├── Progress: 500/2000 sent
+│   │   └── Actions: Edit | Pause | Delete
+│   └── ...
+├── Opt-Out Management
+│   └── Blacklist numbers
+└── Analytics Dashboard
+    ├── Total Sent (Last 30 days)
+    ├── Active Campaigns
+    ├── Opted-Out Numbers
+    └── Delivery Rate
+
+📌 Web Platform Capabilities:
+├── ✅ Campaign creation & editing
+├── ✅ Analytics & reporting
+├── ✅ Settings configuration
+├── ✅ Contact management
+├── ✅ Start/pause campaigns
+└── ❌ NO direct SMS execution (Android only)
+```
+
+**Android Platform (Campaign Execution):**
+```
+Marketing Tab
+├── Same UI as web
+├── Additional:
+│   ├── Import from Phone Contacts button
+│   ├── WorkManager Status Indicator
+│   ├── "Processing..." badge when sending
+│   └── Local queue preview
+└── Background Service Control
+    ├── Auto-start toggle
+    └── Manual "Process Now" button
+```
+
+---
+
+#### 🔐 Permissions (Android)
+
+**Required Permissions:**
+```xml
+<uses-permission android:name="android.permission.SEND_SMS"/>
+<uses-permission android:name="android.permission.READ_CONTACTS"/>
+<uses-permission android:name="android.permission.READ_PHONE_STATE"/>
+```
+
+**Permission Request Flow:**
+1. User activates marketing feature
+2. App explains: "We need contact access to import phone contacts"
+3. User grants permissions
+4. Contact picker UI shown
+
+---
+
+#### 📊 Analytics & Reporting
+
+**Campaign Analytics (Web + Android):**
+```
+Campaign: "Spring Sale 2026"
+├── Status: Active
+├── Created: Feb 1, 2026
+├── Activated: Feb 2, 2026 10:30 AM
+├── Progress: 756/2000 contacts (37.8%)
+├── Sent Today: 100/100 (limit reached)
+├── Total Sent: 756
+├── Failed: 12
+├── Skipped (frequency limit): 45
+├── Skipped (opted out): 8
+├── Pending: 1179
+├── Est. Completion: Feb 23, 2026
+└── Average Send Rate: 100/day
+```
+
+**Tenant Analytics:**
+```
+Marketing Dashboard
+├── Last 30 Days
+│   ├── Total SMS Sent: 2,450
+│   ├── Active Campaigns: 3
+│   ├── Opted-Out Numbers: 23
+│   └── Delivery Rate: 98.5%
+├── Top Campaigns
+│   └── [Bar chart]
+└── Daily Send Volume
+    └── [Line chart]
+```
+
+---
+
+#### ⚙️ Android Implementation (Java/Kotlin)
+
+**WorkManager Setup (Correct Implementation):**
+
+**🚨 CRITICAL: Do NOT use Thread.sleep() in Workers**
+
+```java
+// MarketingCoordinator.java - Main scheduler
+public class MarketingCoordinator {
+    
+    public static void scheduleCampaignProcessing(Context context) {
+        // Periodic check every 30 minutes
+        PeriodicWorkRequest periodicWork = 
+            new PeriodicWorkRequestBuilder<>(
+                CampaignCheckWorker.class,
+                30, TimeUnit.MINUTES
+            )
+            .setConstraints(new Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .setRequiresBatteryNotLow(true)
+                .build())
+            .build();
+            
+        WorkManager.getInstance(context)
+            .enqueueUniquePeriodicWork(
+                "marketing_coordinator",
+                ExistingPeriodicWorkPolicy.KEEP,
+                periodicWork
+            );
+    }
+}
+
+// CampaignCheckWorker.java - Check if work needed
+public class CampaignCheckWorker extends Worker {
+    
+    @Override
+    public Result doWork() {
+        // 1. Quick checks
+        if (!isMarketingEnabled()) return Result.success();
+        if (isDailyLimitReached()) return Result.success();
+        
+        // 2. Get pending contacts (limit to batch size)
+        List<CampaignContact> pending = getPendingContacts(10);
+        if (pending.isEmpty()) return Result.success();
+        
+        // 3. Schedule individual SMS workers with delays
+        for (int i = 0; i < pending.size(); i++) {
+            CampaignContact contact = pending.get(i);
+            
+            // Calculate staggered delay (30-60 seconds apart)
+            long delaySeconds = 30 + (long)(Math.random() * 30);
+            long totalDelay = delaySeconds * i;
+            
+            // Create individual SMS worker
+            Data inputData = new Data.Builder()
+                .putString("phone_number", contact.phoneNumber)
+                .putString("campaign_id", contact.campaignId)
+                .putString("message", contact.message)
+                .build();
+                
+            OneTimeWorkRequest smsWork = 
+                new OneTimeWorkRequest.Builder(SendMarketingSmsWorker.class)
+                    .setInputData(inputData)
+                    .setInitialDelay(totalDelay, TimeUnit.SECONDS)
+                    .addTag("marketing_sms")
+                    .build();
+                    
+            WorkManager.getInstance(getApplicationContext())
+                .enqueue(smsWork);
+        }
+        
+        return Result.success();
+    }
+}
+
+// SendMarketingSmsWorker.java - Send single SMS
+public class SendMarketingSmsWorker extends Worker {
+    
+    @Override
+    public Result doWork() {
+        String phoneNumber = getInputData().getString("phone_number");
+        String campaignId = getInputData().getString("campaign_id");
+        String message = getInputData().getString("message");
+        
+        try {
+            // 1. Final checks
+            if (isDailyLimitReached()) {
+                markContactSkipped(campaignId, phoneNumber, "Daily limit reached");
+                return Result.success();
+            }
+            
+            if (isOptedOut(phoneNumber)) {
+                markContactSkipped(campaignId, phoneNumber, "Opted out");
+                return Result.success();
+            }
+            
+            if (exceedsFrequencyLimit(phoneNumber)) {
+                markContactSkipped(campaignId, phoneNumber, "Frequency limit");
+                return Result.success();
+            }
+            
+            // 2. Send SMS
+            SmsManager smsManager = SmsManager.getDefault();
+            smsManager.sendTextMessage(
+                phoneNumber,
+                null,
+                message,
+                null,
+                null
+            );
+            
+            // 3. Log success
+            logMarketingSMS(campaignId, phoneNumber, message, "sent");
+            
+            // 4. Update counters
+            incrementDailyCount();
+            recordFrequencyEvent(phoneNumber, campaignId);
+            markContactSent(campaignId, phoneNumber);
+            
+            // 5. Sync to Supabase (async)
+            syncLogsToSupabase();
+            
+            return Result.success();
+            
+        } catch (Exception e) {
+            // Log failure
+            logMarketingSMS(campaignId, phoneNumber, message, "failed");
+            markContactFailed(campaignId, phoneNumber, e.getMessage());
+            
+            // Retry up to 3 times
+            if (getRunAttemptCount() < 3) {
+                return Result.retry();
+            }
+            return Result.failure();
+        }
+    }
+}
+```
+
+**Why This Approach is Correct:**
+
+| Aspect | ❌ Thread.sleep() | ✅ Delayed Workers |
+|--------|-------------------|-------------------|
+| **Battery** | Holds wake lock | System-managed |
+| **Reliability** | ANR risk | WorkManager handles |
+| **Cancellation** | Hard to stop | Easy to cancel |
+| **Device reboot** | Loses state | Persisted |
+| **Best Practice** | Violation | Recommended |
+
+**Worker Chaining Benefits:**
+```
+✅ No blocking threads
+✅ System handles scheduling
+✅ Battery-optimized delays
+✅ Survives app restart
+✅ Easy to cancel/pause
+✅ Built-in retry logic
+```
+
+---
+
+#### 🚨 Safety & Compliance
+
+**⚠️ Google Play Store Compliance:**
+```
+CRITICAL REQUIREMENTS:
+├── ✅ Marketing Automation is DISABLED by default
+├── ✅ Requires explicit user action to enable
+├── ✅ NO silent or background SMS sending without user knowledge
+├── ✅ Clear UI disclosure of message content before sending
+├── ✅ Visible recipient list preview
+├── ✅ Prominent opt-out mechanism
+├── ✅ User can disable feature at any time (kill switch)
+└── ✅ In-app explanation of feature purpose
+
+Play Store Policy Compliance:
+├── SMS & Call Log Permissions Policy (compliant)
+├── User Privacy & Data Handling (compliant)
+├── Deceptive Behavior Policy (compliant via transparency)
+└── Background Service Restrictions (compliant via WorkManager)
+```
+
+**Mandatory Disclaimers:**
+```
+Before first use:
+┌────────────────────────────────────────────┐
+│  Marketing Automation Disclaimer           │
+├────────────────────────────────────────────┤
+│  You are responsible for:                  │
+│  ✓ Obtaining recipient consent             │
+│  ✓ Complying with local SMS laws           │
+│  ✓ Respecting opt-out requests             │
+│  ✓ Using appropriate message content       │
+│                                             │
+│  This app enforces technical limits but    │
+│  cannot verify consent or legality.        │
+│                                             │
+│  [ ] I understand and agree                │
+│                                             │
+│  [Cancel]  [Accept & Continue]             │
+└────────────────────────────────────────────┘
+```
+
+**Rate Limiting Visual Feedback:**
+```
+Status Bar:
+├── ⏸️ Paused: Daily limit reached (100/100)
+├── ✅ Active: Sending (75/100 today)
+└── ⏳ Rate limiting: Next send in 45 seconds
+```
+
+---
+
+#### 🧪 Testing Checklist
+
+**Phase 1: Core Functionality**
+- [ ] Create campaign with 10 contacts
+- [ ] Send 5 SMS manually, verify logs
+- [ ] Dynamic field rendering works
+- [ ] Campaign status updates correctly
+
+**Phase 2: Limits & Safety**
+- [ ] Daily limit enforced (100/day)
+- [ ] 30-day per-number limit enforced (2 SMS)
+- [ ] Rate limiting works (30-60 sec delays)
+- [ ] Opt-out blacklist prevents sending
+- [ ] Daily counter resets at midnight
+
+**Phase 3: Performance**
+- [ ] WorkManager doesn't drain battery
+- [ ] Large campaigns (5000+ contacts) handled
+- [ ] App survives device reboot
+- [ ] Sync to Supabase works offline
+- [ ] No UI freezing during sends
+
+**Phase 4: Multi-Tenant**
+- [ ] Tenant A campaigns don't affect Tenant B
+- [ ] Switching workspaces pauses old, starts new
+- [ ] Daily limits per-tenant
+- [ ] Frequency tracker per-tenant
+
+**Phase 5: Web + Android**
+- [ ] Create campaign on web, execute on Android
+- [ ] Web analytics match Android reality
+- [ ] Same user on both platforms works seamlessly
+
+---
+
+#### 📅 Implementation Timeline
+
+**Week 1-2: Database & Backend**
+- [ ] Create all tables with RLS policies
+- [ ] Add indexes for performance
+- [ ] Create Supabase functions for campaign CRUD
+- [ ] Test tenant isolation
+
+**Week 3-4: Android Core**
+- [ ] AutoMarketingWorker implementation
+- [ ] SMS sending with rate limiting
+- [ ] Frequency tracker logic
+- [ ] Daily reset scheduler
+- [ ] Phone contact import
+
+**Week 5-6: Flutter UI**
+- [ ] Campaign list screen
+- [ ] Campaign creation wizard
+- [ ] Contact selection UI (CSV, phonebook, existing)
+- [ ] Template editor with dynamic fields preview
+- [ ] Opt-out management screen
+- [ ] Analytics dashboard
+
+**Week 7: Web Platform**
+- [ ] Campaign management pages
+- [ ] Same UI as mobile (responsive)
+- [ ] Analytics charts
+- [ ] Settings page
+
+**Week 8: Testing & Polish**
+- [ ] End-to-end testing
+- [ ] Performance optimization
+- [ ] Battery usage testing
+- [ ] Documentation
+- [ ] User onboarding flow
+
+---
+
+#### 🎯 Success Criteria
+
+**Technical:**
+- ✅ Daily limit never exceeded
+- ✅ Per-number limit strictly enforced
+- ✅ Battery usage < 5% per day
+- ✅ 99%+ delivery rate (when network available)
+- ✅ Logs sync correctly to Supabase
+- ✅ Zero data leaks between tenants
+
+**User Experience:**
+- ✅ Campaign creation < 2 minutes
+- ✅ Clear quota display (X/100 sent today)
+- ✅ Instant kill switch works
+- ✅ Web + Android seamlessly synced
+
+**Compliance:**
+- ✅ Opt-in by default (disabled)
+- ✅ Clear consent disclaimers
+- ✅ Opt-out mechanism works
+- ✅ Anti-spam limits cannot be bypassed
+
+---
+
+#### 🔮 Future Enhancements (Phase 3)
+
+**Advanced Features:**
+- 📅 Schedule campaigns (start/stop times)
+- 🔄 A/B testing (multiple message variants)
+- 📊 Advanced analytics (open rates, if supported)
+- 🤖 AI message optimization
+- 📧 Multi-channel (SMS + Email)
+- 🌍 Timezone-aware sending
+- 📞 SMS reply listener for "STOP" auto-opt-out
+- 🎯 Segment targeting (age, location, etc.)
+
+**Enterprise Features:**
+- 👥 Multi-device campaign execution (load balancing)
+- 🔒 Approval workflows (manager must approve)
+- 💰 Budget limits per campaign
+- 📈 ROI tracking
+- 🔗 CRM integration (Salesforce, HubSpot)
+
+---
+
+📌 **Status:** Specification complete, development starting Q1 2026
+
+---
+
 ## 📋 Phase 3: Scale & Enterprise Features (PLANNED)
 
 **Goal:** Enterprise-grade features for large organizations.
@@ -344,8 +1040,9 @@ Device B:
 | **2.2** | Backend & Sync | Q4 2024 | ✅ Complete |
 | **2.3** | API-Triggered SMS | Q4 2025 | ✅ Complete |
 | **2.4** | API Security | Q4 2025 | ✅ Complete |
-| **2.5** | Sender ID | Q2 2026 | 🔲 Planned |
 | **2.6** | Settings Backup | Q4 2024 | ✅ Complete |
+| **2.7** | Auto Marketing Engine | Q1 2026 | � In Progress |
+| **2.5** | Sender ID | Q2 2026 | 🔲 Planned |
 | **3.0** | Enterprise Features | Q3 2026 | 📋 Planned |
 
 ---
@@ -361,11 +1058,14 @@ Device B:
 | Multi-Tenant Access | 2.1 | ✅ Complete |
 | Settings Backup/Restore | 2.6 | ✅ Complete |
 | Client-Product Access | 2.1 | ✅ Complete |
-| Offline-First Storage | 2.2 | � In Progress |
-| Message Sync to Cloud | 2.2 | � In Progress |
-| REST API Endpoints | 2.3 | 🔲 Planned |
-| API Key Generation | 2.4 | 🔲 Planned |
-| Rate Limiting | 2.4 | 🔲 Planned |
+| REST API Endpoints | 2.3 | ✅ Complete |
+| API Key Generation | 2.4 | ✅ Complete |
+| Rate Limiting | 2.4 | ✅ Complete |
+| **Auto Marketing Campaigns** | **2.7** | **🔄 In Progress** |
+| **Marketing Analytics** | **2.7** | **🔄 In Progress** |
+| **Phone Contact Import** | **2.7** | **� In Progress** |
+| Offline-First Storage | 2.2 | 🔲 Planned |
+| Message Sync to Cloud | 2.2 | 🔲 Planned |
 
 ### 🟡 Medium Priority (Phase 2.5 / 3)
 
@@ -373,8 +1073,8 @@ Device B:
 |---------|-------|--------|
 | Sender ID Support | 2.5 | 🔲 |
 | Provider Integration | 2.5 | 🔲 |
-| Scheduled SMS | 3 | 🔲 |
 | Message Templates | 3 | 🔲 |
+| Scheduled SMS | 3 | 🔲 |
 | Delivery Reports | 3 | 🔲 |
 | Analytics Dashboard | 3 | 🔲 |
 
@@ -527,10 +1227,50 @@ Have a feature request?
 
 ---
 
-## 🚀 WHAT'S NEXT: Phase 2.5 - Provider Integration
+## 🚀 WHAT'S NEXT: Phase 2.7 - Auto Marketing Engine
 
-### Phase 2.5 - Sender ID Support (Next Development Phase)
-**Status:** 🔲 READY TO START
+### Phase 2.7 - Auto Marketing Engine (Current Development Phase)
+**Status:** 🔄 IN PROGRESS - Q1 2026
+
+**Goal:** Enable controlled, ethical SMS marketing campaigns via Android SIM with strict anti-spam safeguards.
+
+**Key Features:**
+1. Campaign management (create, edit, activate multiple campaigns)
+2. Multi-source contact import (CSV, phonebook, existing contacts)
+3. Message templates with dynamic fields ({first_name}, {last_name}, {phone})
+4. Strict frequency limits (100 SMS/day per tenant, 2 SMS/30 days per number)
+5. Rate limiting (2 SMS/minute with randomized delays)
+6. Manual opt-out blacklist
+7. Web + Android sync (create on web, execute on Android)
+8. Campaign analytics and reporting
+9. WorkManager background execution (battery-optimized)
+
+**Implementation Timeline:**
+- **Week 1-2:** Database schema + RLS policies
+- **Week 3-4:** Android WorkManager + SMS sending logic
+- **Week 5-6:** Flutter UI (campaigns, analytics, opt-outs)
+- **Week 7:** Web platform integration
+- **Week 8:** Testing, optimization, documentation
+
+**Files to Create:**
+- `database/marketing_schema.sql` (6 new tables)
+- `android/app/src/main/java/.../workers/MarketingCoordinator.java`
+- `android/app/src/main/java/.../workers/CampaignCheckWorker.java`
+- `android/app/src/main/java/.../workers/SendMarketingSmsWorker.java`
+- `lib/screens/marketing/campaign_list_screen.dart`
+- `lib/screens/marketing/campaign_create_screen.dart`
+- `lib/screens/marketing/campaign_analytics_screen.dart`
+- `lib/screens/marketing/optout_management_screen.dart`
+- `lib/services/marketing_service.dart`
+- `lib/models/marketing_campaign.dart`
+- `lib/models/campaign_contact.dart`
+
+**Estimated Completion:** End of Q1 2026
+
+---
+
+### Phase 2.5 - Sender ID Support (Next After Marketing)
+**Status:** 🔲 READY TO START - Q2 2026
 
 **Goal:** Integrate SMS providers for branded Sender ID (e.g., "MYSCHOOL" instead of phone number)
 
@@ -564,21 +1304,25 @@ Have a feature request?
 
 ## 📋 Phase 3 - Enterprise Features (Long Term)
 
-**Planning Phase - Q1 2026**
+**Planning Phase - Q2 2026**
 
 **Potential Features:**
 - Offline-first storage (local SQLite + sync)
-- Scheduled SMS (send at specific time)
-- Message templates (reusable messages)
-- Delivery reports and analytics
-- Multi-user roles (admin, manager, staff)
-- Multiple devices per organization
-- Usage analytics dashboard
+- Advanced scheduled SMS (time windows, timezone-aware)
+- A/B testing for marketing campaigns
+- AI message optimization
+- SMS reply listener (auto-opt-out on "STOP")
+- Multi-channel (SMS + Email + WhatsApp)
+- Delivery reports and advanced analytics
+- Multi-user roles with approval workflows
+- Multiple devices per organization (load balancing)
+- Usage analytics dashboard with charts
 - Billing and quotas system
-- Two-way SMS (receive replies)
-- WhatsApp integration
+- Two-way SMS (receive and process replies)
+- CRM integration (Salesforce, HubSpot)
+- ROI tracking for campaigns
 
-**Timeline:** Q2-Q3 2026
+**Timeline:** Q3 2026
 
 ---
 
