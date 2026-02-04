@@ -42,3 +42,8 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // WorkManager for background task scheduling
+    implementation("androidx.work:work-runtime:2.9.0")
+}

@@ -14,9 +14,11 @@ import android.content.pm.PackageManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import com.lwenatech.sms_gateway.services.MarketingMethodChannelHandler
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.lwenatech.sms_gateway/sms"
+    private val MARKETING_CHANNEL = "com.lwenatech.sms_gateway/marketing"
     private val SMS_SENT = "SMS_SENT"
     private val SMS_DELIVERED = "SMS_DELIVERED"
     private var sentCount = 0
@@ -67,6 +69,9 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        val marketingChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, MARKETING_CHANNEL)
+        MarketingMethodChannelHandler.register(marketingChannel, applicationContext)
     }
 
     private fun sendSms(phoneNumber: String, message: String, result: MethodChannel.Result) {
@@ -131,7 +136,7 @@ class MainActivity : FlutterActivity() {
                 try {
                     val sentIntent = Intent(SMS_SENT)
                     sentIntent.putExtra("phoneNumber", phoneNumber)
-                    
+
                     val sentPendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                         PendingIntent.getBroadcast(
                             this, phoneNumber.hashCode(), sentIntent,

@@ -13,6 +13,7 @@ import '../main.dart';
 import 'profile_screen.dart';
 import 'tenant_selector_screen.dart';
 import 'api_settings_screen.dart';
+import 'marketing_settings_screen.dart';
 
 // SMS Channel options
 enum SmsChannel { thisPhone, quickSMS }
@@ -666,6 +667,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                   ],
+                ),
+              );
+            },
+          ),
+
+          const Divider(),
+
+          // Marketing Automation Section
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Text(
+              'Marketing Automation',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: Theme.of(context).primaryColor,
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+          ),
+
+          ListTile(
+            leading: const Icon(Icons.campaign, color: AppTheme.primaryColor),
+            title: const Text('Marketing Settings'),
+            subtitle: const Text('Automated SMS campaigns & scheduling'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const MarketingSettingsScreen(),
                 ),
               );
             },

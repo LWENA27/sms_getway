@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../database/app_database.dart';
 import '../core/tenant_service.dart';
+import '../core/phone_validator.dart';
 
 /// Sync status for the entire sync operation
 enum OverallSyncStatus {
@@ -232,20 +233,40 @@ class SyncService extends ChangeNotifier {
     for (final contact in pendingContacts) {
       try {
         if (contact.syncStatus == 'pending_create') {
-          await _supabase.schema('sms_gateway').from('contacts').insert({
+          // Normalize phone number to E.164 format before saving
+          final normalizedPhone = PhoneValidator.normalize(contact.phoneNumber);
+
+          if (normalizedPhone == null) {
+            // Invalid phone number - skip and log
+            debugPrint(
+                '⚠️ Skipping contact ${contact.id}: invalid phone number "${contact.phoneNumber}"');
+            continue;
+          }
+
+          // Use upsert to handle conflicts gracefully
+          await _supabase.schema('sms_gateway').from('contacts').upsert({
             'id': contact.id,
             'tenant_id': contact.tenantId,
             'user_id': contact.userId,
             'name': contact.name,
-            'phone_number': contact.phoneNumber,
+            'phone_number': normalizedPhone, // Use normalized phone
             'created_at': contact.createdAt.toIso8601String(),
           });
           syncedIds.add(contact.id);
           count++;
         } else if (contact.syncStatus == 'pending_update') {
+          // Normalize phone number for updates too
+          final normalizedPhone = PhoneValidator.normalize(contact.phoneNumber);
+
+          if (normalizedPhone == null) {
+            debugPrint(
+                '⚠️ Skipping contact update ${contact.id}: invalid phone number "${contact.phoneNumber}"');
+            continue;
+          }
+
           await _supabase.schema('sms_gateway').from('contacts').update({
             'name': contact.name,
-            'phone_number': contact.phoneNumber,
+            'phone_number': normalizedPhone, // Use normalized phone
           }).eq('id', contact.id);
           syncedIds.add(contact.id);
           count++;
@@ -290,7 +311,8 @@ class SyncService extends ChangeNotifier {
     for (final group in pendingGroups) {
       try {
         if (group.syncStatus == 'pending_create') {
-          await _supabase.schema('sms_gateway').from('groups').insert({
+          // Use upsert to handle conflicts gracefully
+          await _supabase.schema('sms_gateway').from('groups').upsert({
             'id': group.id,
             'tenant_id': group.tenantId,
             'user_id': group.userId,
@@ -331,7 +353,8 @@ class SyncService extends ChangeNotifier {
     for (final member in pendingMembers) {
       try {
         if (member.syncStatus == 'pending_create') {
-          await _supabase.schema('sms_gateway').from('group_members').insert({
+          // Use upsert to handle conflicts gracefully
+          await _supabase.schema('sms_gateway').from('group_members').upsert({
             'id': member.id,
             'group_id': member.groupId,
             'contact_id': member.contactId,
@@ -368,7 +391,8 @@ class SyncService extends ChangeNotifier {
     for (final log in pendingLogs) {
       try {
         if (log.syncStatus == 'pending_create') {
-          await _supabase.schema('sms_gateway').from('sms_logs').insert({
+          // Use upsert to handle conflicts gracefully
+          await _supabase.schema('sms_gateway').from('sms_logs').upsert({
             'id': log.id,
             'tenant_id': log.tenantId,
             'user_id': log.userId,

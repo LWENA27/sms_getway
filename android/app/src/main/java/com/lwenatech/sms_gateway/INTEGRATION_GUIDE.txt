@@ -1,0 +1,68 @@
+// =============================================================================
+// WEEK 2 ANDROID INTEGRATION GUIDE
+// =============================================================================
+// 
+// This file shows how to integrate marketing automation into MainActivity.kt
+// DO NOT replace MainActivity.kt - just ADD these lines in the appropriate places.
+//
+// =============================================================================
+
+// STEP 1: Add import at top of MainActivity.kt
+// -----------------------------------------------------------------------------
+import com.lwenatech.sms_gateway.services.MarketingMethodChannelHandler
+
+// STEP 2: Add marketing channel constant
+// -----------------------------------------------------------------------------
+// Add this line after: private val CHANNEL = "com.lwenatech.sms_gateway/sms"
+private val MARKETING_CHANNEL = "com.lwenatech.sms_gateway/marketing"
+
+// STEP 3: Register marketing channel in configureFlutterEngine()
+// -----------------------------------------------------------------------------
+// Add these lines at the END of configureFlutterEngine() method, 
+// AFTER the existing MethodChannel.setMethodCallHandler block:
+
+val marketingChannel = MethodChannel(
+    flutterEngine.dartExecutor.binaryMessenger, 
+    MARKETING_CHANNEL
+)
+MarketingMethodChannelHandler.register(marketingChannel, applicationContext)
+
+// =============================================================================
+// COMPLETE INTEGRATION EXAMPLE
+// =============================================================================
+// 
+// Your configureFlutterEngine() should look like this:
+//
+// override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+//     super.configureFlutterEngine(flutterEngine)
+//
+//     // Existing SMS channel
+//     MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
+//         .setMethodCallHandler { call, result ->
+//             // ... existing SMS handlers ...
+//         }
+//
+//     // NEW: Marketing automation channel
+//     val marketingChannel = MethodChannel(
+//         flutterEngine.dartExecutor.binaryMessenger, 
+//         MARKETING_CHANNEL
+//     )
+//     MarketingMethodChannelHandler.register(marketingChannel, applicationContext)
+// }
+//
+// =============================================================================
+// THAT'S IT! 
+// =============================================================================
+// 
+// Now Flutter can call marketing methods like:
+//
+// await platform.invokeMethod('enableMarketing', {
+//   'tenant_id': 'uuid-here',
+//   'daily_limit': 100,
+// });
+//
+// await platform.invokeMethod('getCampaignStats', {
+//   'campaign_id': 'uuid-here',
+// });
+//
+// =============================================================================

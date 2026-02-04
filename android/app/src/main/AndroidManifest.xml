@@ -9,6 +9,9 @@
     <!-- Internet Permission -->
     <uses-permission android:name="android.permission.INTERNET" />
     
+    <!-- Foreground Service Permission (Android 9+) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    
     <application
         android:label="SMS Gateway Pro"
         android:name="${applicationName}"
@@ -38,6 +41,14 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        
+        <!-- Marketing SMS Foreground Service -->
+        <service
+            android:name=".services.MarketingSmsService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+        
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

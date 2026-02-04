@@ -46,12 +46,12 @@ class SmsRequest {
 
   factory SmsRequest.fromJson(Map<String, dynamic> json) {
     return SmsRequest(
-      id: json['id'] as String,
-      tenantId: json['tenant_id'] as String,
-      apiKeyId: json['api_key_id'] as String,
-      phoneNumber: json['phone_number'] as String,
-      message: json['message'] as String,
-      status: json['status'] as String,
+      id: json['id'] as String? ?? '',
+      tenantId: json['tenant_id'] as String? ?? '',
+      apiKeyId: json['api_key_id'] as String? ?? '',
+      phoneNumber: json['phone_number'] as String? ?? '',
+      message: json['message'] as String? ?? '',
+      status: json['status'] as String? ?? 'pending',
       priority: json['priority'] as int? ?? 0,
       scheduledAt: json['scheduled_at'] != null
           ? DateTime.parse(json['scheduled_at'] as String)
@@ -62,7 +62,9 @@ class SmsRequest {
       errorMessage: json['error_message'] as String?,
       externalId: json['external_id'] as String?,
       metadata: json['metadata'] as Map<String, dynamic>?,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'] as String)
+          : DateTime.now(),
     );
   }
 }
