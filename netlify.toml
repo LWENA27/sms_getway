@@ -2,18 +2,14 @@
 # SMS Gateway Pro - Web Admin Panel
 #
 # IMPORTANT: Build is handled by GitHub Actions (.github/workflows/deploy-netlify.yml)
-# Disable Netlify's automatic builds in site settings:
-# Site Settings > Build & Deploy > Build Settings > Stop builds
+# Netlify's automatic builds are disabled - GitHub Actions deploys directly via API
 
 [build]
   # This should never run - GitHub Actions deploys directly via API
   command = "exit 0"
   publish = "build/web"
-
-# Disable automatic builds from Git
-[build.ignore]
-  # Always ignore - GitHub Actions handles deployment
-  command = "exit 0"
+  # Ignore all Git commits - GitHub Actions handles deployment
+  ignore = "exit 0"
 
 # SPA routing - redirect all requests to index.html
 [[redirects]]
