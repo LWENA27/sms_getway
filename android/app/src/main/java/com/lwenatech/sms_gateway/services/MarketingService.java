@@ -48,10 +48,11 @@ public class MarketingService {
      * This starts the periodic WorkManager job that checks for campaigns.
      * 
      * @param tenantId Tenant UUID
+     * @param userId User UUID (from auth.users)
      * @param dailyLimit Max SMS per day (default 100)
      * @param accessToken User's Supabase JWT token for RLS
      */
-    public void enableMarketing(String tenantId, int dailyLimit, String accessToken) {
+    public void enableMarketing(String tenantId, String userId, int dailyLimit, String accessToken) {
         try {
             android.util.Log.i(TAG, "Enabling marketing automation");
             
@@ -60,6 +61,7 @@ public class MarketingService {
             SharedPreferences.Editor editor = prefs.edit();
             editor.putBoolean("marketing_enabled", true);
             editor.putString("tenant_id", tenantId);
+            editor.putString("user_id", userId);
             editor.putInt("daily_limit", dailyLimit);
             if (accessToken != null && !accessToken.isEmpty()) {
                 editor.putString("access_token", accessToken);

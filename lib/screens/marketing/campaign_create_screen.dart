@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/marketing_campaign.dart';
 import '../../contacts/contact_model.dart';
+import '../../groups/group_model.dart';
 import '../../core/tenant_service.dart';
 
 /// Campaign Create/Edit Screen
@@ -22,11 +23,18 @@ class _CampaignCreateScreenState extends State<CampaignCreateScreen> {
 
   final _nameController = TextEditingController();
   final _messageController = TextEditingController();
+  final _searchController = TextEditingController();
 
   List<Contact> _availableContacts = [];
+  List<Group> _availableGroups = [];
   Set<String> _selectedContactIds = {};
+  Set<String> _selectedGroupIds = {};
   bool _loading = false;
   bool _loadingContacts = false;
+  bool _loadingGroups = false;
+  String _searchQuery = '';
+  int _loadedContactCount = 0;
+  int _totalContactCount = 0;
 
   bool get _isEditing => widget.campaign != null;
 
@@ -38,12 +46,14 @@ class _CampaignCreateScreenState extends State<CampaignCreateScreen> {
       _messageController.text = widget.campaign!.messageTemplate;
     }
     _loadContacts();
+    _loadGroups();
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _messageController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -55,18 +65,23 @@ class _CampaignCreateScreenState extends State<CampaignCreateScreen> {
       final tenantId = _tenantService.currentTenant?.id;
       if (tenantId == null) throw Exception('No tenant selected');
 
+      // Load all contacts with high limit (Supabase default is 1000)
+      // Set to 100,000 to handle large contact lists
       final response = await _supabase
           .schema('sms_gateway')
           .from('contacts')
           .select()
           .eq('tenant_id', tenantId)
-          .order('name');
+          .order('name')
+          .limit(100000); // Explicit high limit to override default 1000
 
       final contacts =
           (response as List).map((json) => Contact.fromJson(json)).toList();
 
       setState(() {
         _availableContacts = contacts;
+        _loadedContactCount = contacts.length;
+        _totalContactCount = contacts.length;
         _loadingContacts = false;
       });
     } catch (e) {
@@ -80,6 +95,91 @@ class _CampaignCreateScreenState extends State<CampaignCreateScreen> {
         );
       }
     }
+  }
+
+  Future<void> _loadGroups() async {
+    setState(() => _loadingGroups = true);
+
+    try {
+      await _tenantService.initialize();
+      final tenantId = _tenantService.currentTenant?.id;
+      if (tenantId == null) throw Exception('No tenant selected');
+
+      final response =
+          await _supabase.schema('sms_gateway').from('groups').select('''
+            id,
+            name,
+            user_id,
+            tenant_id,
+            created_at
+          ''').eq('tenant_id', tenantId).order('name');
+
+      final groups =
+          (response as List).map((json) => Group.fromJson(json)).toList();
+
+      setState(() {
+        _availableGroups = groups;
+        _loadingGroups = false;
+      });
+    } catch (e) {
+      setState(() => _loadingGroups = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading groups: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _selectGroup(String groupId) async {
+    try {
+      // Load all contacts in this group
+      final response = await _supabase
+          .schema('sms_gateway')
+          .from('group_members')
+          .select('contact_id')
+          .eq('group_id', groupId);
+
+      final contactIds = (response as List)
+          .map((json) => json['contact_id'] as String)
+          .toSet();
+
+      setState(() {
+        if (_selectedGroupIds.contains(groupId)) {
+          // Deselect group - remove its contacts
+          _selectedGroupIds.remove(groupId);
+          _selectedContactIds.removeAll(contactIds);
+        } else {
+          // Select group - add its contacts
+          _selectedGroupIds.add(groupId);
+          _selectedContactIds.addAll(contactIds);
+        }
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error selecting group: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  List<Contact> get _filteredContacts {
+    if (_searchQuery.isEmpty) return _availableContacts;
+
+    final query = _searchQuery.toLowerCase();
+    return _availableContacts.where((contact) {
+      return contact.name.toLowerCase().contains(query) ||
+          contact.phoneNumber.toLowerCase().contains(query) ||
+          (contact.firstName?.toLowerCase().contains(query) ?? false) ||
+          (contact.lastName?.toLowerCase().contains(query) ?? false);
+    }).toList();
   }
 
   String _renderPreview() {
@@ -299,7 +399,7 @@ class _CampaignCreateScreenState extends State<CampaignCreateScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Select Contacts',
+                  'Select Recipients',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 TextButton.icon(
@@ -308,9 +408,11 @@ class _CampaignCreateScreenState extends State<CampaignCreateScreen> {
                       if (_selectedContactIds.length ==
                           _availableContacts.length) {
                         _selectedContactIds.clear();
+                        _selectedGroupIds.clear();
                       } else {
                         _selectedContactIds =
                             _availableContacts.map((c) => c.id).toSet();
+                        // Don't auto-select groups when selecting all contacts
                       }
                     });
                   },
@@ -330,8 +432,96 @@ class _CampaignCreateScreenState extends State<CampaignCreateScreen> {
             ),
             const SizedBox(height: 8),
 
+            // Groups Section
+            if (_loadingGroups)
+              const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+              )
+            else if (_availableGroups.isNotEmpty)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.group_work, size: 18),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Select Groups',
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _availableGroups.map((group) {
+                          final isSelected =
+                              _selectedGroupIds.contains(group.id);
+                          return FilterChip(
+                            label: Text(group.name),
+                            selected: isSelected,
+                            onSelected: (_) => _selectGroup(group.id),
+                            avatar: Icon(
+                              isSelected ? Icons.check_circle : Icons.group,
+                              size: 16,
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            const SizedBox(height: 12),
+
+            // Search Bar
+            if (_availableContacts.isNotEmpty)
+              TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Search contacts...',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            setState(() {
+                              _searchController.clear();
+                              _searchQuery = '';
+                            });
+                          },
+                        )
+                      : null,
+                  border: const OutlineInputBorder(),
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value;
+                  });
+                },
+              ),
+            const SizedBox(height: 12),
+
             if (_loadingContacts)
-              const Center(child: CircularProgressIndicator())
+              const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('Loading contacts...'),
+                    ],
+                  ),
+                ),
+              )
             else if (_availableContacts.isEmpty)
               Card(
                 child: Padding(
@@ -360,52 +550,80 @@ class _CampaignCreateScreenState extends State<CampaignCreateScreen> {
                     Padding(
                       padding: const EdgeInsets.all(12),
                       child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Icon(Icons.group, size: 18),
-                          const SizedBox(width: 8),
-                          Text(
-                            '${_selectedContactIds.length} of ${_availableContacts.length} selected',
-                            style: Theme.of(context).textTheme.titleSmall,
+                          Row(
+                            children: [
+                              const Icon(Icons.group, size: 18),
+                              const SizedBox(width: 8),
+                              Text(
+                                '${_selectedContactIds.length} selected',
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                            ],
                           ),
+                          if (_totalContactCount > 0)
+                            Text(
+                              '${_loadedContactCount} / ${_totalContactCount} loaded',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
                         ],
                       ),
                     ),
                     const Divider(height: 1),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 300),
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: _availableContacts.length,
-                        itemBuilder: (context, index) {
-                          final contact = _availableContacts[index];
-                          final isSelected =
-                              _selectedContactIds.contains(contact.id);
-
-                          return CheckboxListTile(
-                            value: isSelected,
-                            onChanged: (selected) {
-                              setState(() {
-                                if (selected == true) {
-                                  _selectedContactIds.add(contact.id);
-                                } else {
-                                  _selectedContactIds.remove(contact.id);
-                                }
-                              });
-                            },
-                            title: Text(contact.fullName),
-                            subtitle: Text(contact.phoneNumber),
-                            secondary: CircleAvatar(
-                              child: Text(
-                                contact.firstName
-                                        ?.substring(0, 1)
-                                        .toUpperCase() ??
-                                    contact.name.substring(0, 1).toUpperCase(),
-                              ),
+                    if (_filteredContacts.isEmpty && _searchQuery.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          children: [
+                            const Icon(Icons.search_off,
+                                size: 48, color: Colors.grey),
+                            const SizedBox(height: 8),
+                            Text(
+                              'No contacts found for "$_searchQuery"',
+                              style: const TextStyle(color: Colors.grey),
                             ),
-                          );
-                        },
+                          ],
+                        ),
+                      )
+                    else
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 300),
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: _filteredContacts.length,
+                          itemBuilder: (context, index) {
+                            final contact = _filteredContacts[index];
+                            final isSelected =
+                                _selectedContactIds.contains(contact.id);
+
+                            return CheckboxListTile(
+                              value: isSelected,
+                              onChanged: (selected) {
+                                setState(() {
+                                  if (selected == true) {
+                                    _selectedContactIds.add(contact.id);
+                                  } else {
+                                    _selectedContactIds.remove(contact.id);
+                                  }
+                                });
+                              },
+                              title: Text(contact.fullName),
+                              subtitle: Text(contact.phoneNumber),
+                              secondary: CircleAvatar(
+                                child: Text(
+                                  contact.firstName
+                                          ?.substring(0, 1)
+                                          .toUpperCase() ??
+                                      contact.name
+                                          .substring(0, 1)
+                                          .toUpperCase(),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -444,15 +662,37 @@ class _CampaignCreateScreenState extends State<CampaignCreateScreen> {
               ],
             ),
 
-            // Warning Card
+            // Info Cards
             const SizedBox(height: 16),
+            Card(
+              color: Colors.blue.shade50,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline,
+                        color: Colors.blue, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Showing all ${_totalContactCount > 0 ? _totalContactCount : _loadedContactCount} contacts. Use groups for quick selection.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.blue.shade900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             Card(
               color: Colors.orange.shade50,
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    const Icon(Icons.info_outline,
+                    const Icon(Icons.warning_outlined,
                         color: Colors.orange, size: 20),
                     const SizedBox(width: 8),
                     Expanded(

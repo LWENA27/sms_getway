@@ -517,6 +517,7 @@ class _HomePageState extends State<HomePage> {
   int smsLogCount = 0;
   bool isLoading = true;
   int _currentIndex = 0;
+  int _pendingCount = 0; // Track pending sync count
 
   @override
   void initState() {
@@ -556,17 +557,22 @@ class _HomePageState extends State<HomePage> {
 
         // ✅ OPTIMIZATION 1: Load local data FIRST (instant UI update)
         final localCounts = await LocalDataService().getDashboardCounts();
+        final pendingCount = await LocalDataService().getPendingSyncCount();
+
+        debugPrint('📊 Pending sync count: $pendingCount');
 
         if (mounted) {
           setState(() {
             contactCount = localCounts['contacts'] ?? 0;
             groupCount = localCounts['groups'] ?? 0;
             smsLogCount = localCounts['smsLogs'] ?? 0;
+            _pendingCount = pendingCount;
             isLoading = false; // ✅ Show UI immediately with cached data
           });
         }
 
         // ✅ OPTIMIZATION 2: Sync in background (non-blocking)
+        // Use unawaited to make it truly async - don't block UI
         _syncDataInBackground(tenantId);
 
         // Auto-start API SMS Queue if configured
@@ -593,18 +599,30 @@ class _HomePageState extends State<HomePage> {
     try {
       debugPrint('🔄 Starting background data sync...');
 
-      // Pull latest data from Supabase (non-blocking)
-      await LocalDataService().loadTenantData(tenantId);
+      // ✅ OPTIMIZATION: Skip full sync if we have local data (lazy load)
+      // Only pull initial data if local database is empty
+      final localCounts = await LocalDataService().getDashboardCounts();
+      final hasLocalData = (localCounts['contacts'] ?? 0) > 0;
 
-      // Refresh counts after sync
-      final updatedCounts = await LocalDataService().getDashboardCounts();
+      if (!hasLocalData) {
+        debugPrint('📥 First launch - pulling initial data...');
+        await LocalDataService().loadTenantData(tenantId);
+        debugPrint('✅ Initial data pull complete');
+      } else {
+        debugPrint('⏭️ Skipping initial sync - local data exists');
+      }
 
-      if (mounted) {
-        setState(() {
-          contactCount = updatedCounts['contacts'] ?? 0;
-          groupCount = updatedCounts['groups'] ?? 0;
-          smsLogCount = updatedCounts['smsLogs'] ?? 0;
-        });
+      // Refresh counts after sync (if we did sync)
+      if (!hasLocalData) {
+        final updatedCounts = await LocalDataService().getDashboardCounts();
+
+        if (mounted) {
+          setState(() {
+            contactCount = updatedCounts['contacts'] ?? 0;
+            groupCount = updatedCounts['groups'] ?? 0;
+            smsLogCount = updatedCounts['smsLogs'] ?? 0;
+          });
+        }
       }
 
       debugPrint('✅ Background sync complete');
@@ -629,6 +647,85 @@ class _HomePageState extends State<HomePage> {
       }
     } catch (e) {
       debugPrint('❌ Error auto-starting API queue: $e');
+    }
+  }
+
+  /// ⚠️ EMERGENCY FIX: Mark all pending contacts as synced
+  Future<void> _fixSyncStatus() async {
+    // Show confirmation dialog
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Fix Sync Status'),
+        content: Text(
+          'This will mark all $_pendingCount pending contacts as synced.\n\n'
+          'Only use this if these contacts already exist in the cloud and shouldn\'t be synced again.\n\n'
+          'Continue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Fix Now'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    // Show progress
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Fixing sync status...'),
+            ],
+          ),
+        ),
+      );
+    }
+
+    try {
+      final fixed = await LocalDataService().markAllContactsAsSynced();
+
+      // Reload pending count
+      final newPendingCount = await LocalDataService().getPendingSyncCount();
+
+      if (mounted) {
+        Navigator.pop(context); // Close progress
+
+        setState(() {
+          _pendingCount = newPendingCount;
+        });
+
+        // Show success
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Fixed $fixed contacts. Pending: $newPendingCount'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close progress
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -830,6 +927,54 @@ class _HomePageState extends State<HomePage> {
                             );
                           },
                         ),
+                        const SizedBox(height: AppTheme.paddingLarge),
+
+                        // ⚠️ EMERGENCY FIX BUTTON - Remove after fixing sync
+                        if (_pendingCount > 1000) // Only show if many pending
+                          Card(
+                            color: Colors.orange.shade50,
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.all(AppTheme.paddingMedium),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(Icons.warning, color: Colors.orange),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Sync Issue Detected',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'You have $_pendingCount contacts waiting to sync. '
+                                    'If these contacts already exist in the cloud, use this fix:',
+                                    style:
+                                        Theme.of(context).textTheme.bodyMedium,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  ElevatedButton.icon(
+                                    onPressed: _fixSyncStatus,
+                                    icon: const Icon(Icons.build),
+                                    label: const Text('Fix Sync Status'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.orange,
+                                      foregroundColor: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),

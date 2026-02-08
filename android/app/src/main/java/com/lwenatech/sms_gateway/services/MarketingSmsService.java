@@ -19,7 +19,11 @@ import androidx.core.content.ContextCompat;
 import com.lwenatech.sms_gateway.MainActivity;
 import com.lwenatech.sms_gateway.R;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Foreground Service for sending marketing SMS.
@@ -39,6 +43,7 @@ public class MarketingSmsService extends Service {
 
     private NotificationManager notificationManager;
     private int smsSentCount = 0;
+    private ExecutorService executorService;
 
     @Override
     public void onCreate() {
@@ -46,6 +51,7 @@ public class MarketingSmsService extends Service {
         Log.i(TAG, "Marketing SMS Service created");
         
         notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        executorService = Executors.newFixedThreadPool(2); // 2 threads for database operations
         createNotificationChannel();
         startForeground(NOTIFICATION_ID, createNotification("Initializing..."));
     }
@@ -77,13 +83,13 @@ public class MarketingSmsService extends Service {
             updateNotification("Sent " + smsSentCount + " marketing SMS");
             
             // Log success to database
-            logMarketingEvent(contactId, campaignId, phoneNumber, tenantId, "sent", null);
+            logMarketingEvent(contactId, campaignId, phoneNumber, message, tenantId, "sent", null);
             
             // Update contact status to 'sent'
             updateContactStatus(contactId, "sent");
         } else {
             // Log failure to database
-            logMarketingEvent(contactId, campaignId, phoneNumber, tenantId, "failed", "SMS sending failed");
+            logMarketingEvent(contactId, campaignId, phoneNumber, message, tenantId, "failed", "SMS sending failed");
         }
 
         // Stop service after processing (worker will start new instance for next SMS)
@@ -99,6 +105,9 @@ public class MarketingSmsService extends Service {
     @Override
     public void onDestroy() {
         Log.i(TAG, "Marketing SMS Service destroyed");
+        if (executorService != null && !executorService.isShutdown()) {
+            executorService.shutdown();
+        }
         super.onDestroy();
     }
 
@@ -188,57 +197,80 @@ public class MarketingSmsService extends Service {
      * Log marketing event to database
      */
     private void logMarketingEvent(String contactId, String campaignId, String phoneNumber,
-                                   String tenantId, String status, String errorMessage) {
-        try {
-            SupabaseClient supabase = new SupabaseClient(this);
+                                   String message, String tenantId, String status, String errorMessage) {
+        // Run on background thread to avoid NetworkOnMainThreadException
+        executorService.execute(() -> {
+            try {
+                SupabaseClient supabase = new SupabaseClient(this);
             
             // Load access token for RLS
             SharedPreferences prefs = getSharedPreferences("marketing_prefs", Context.MODE_PRIVATE);
             String accessToken = prefs.getString("access_token", null);
+            String userId = prefs.getString("user_id", null);
             if (accessToken != null) {
                 supabase.setAuthToken(accessToken);
             }
             
-            JSONObject log = new JSONObject();
-            log.put("tenant_id", tenantId);
-            log.put("campaign_id", campaignId);
-            log.put("contact_id", contactId);
-            log.put("phone_number", phoneNumber);
-            log.put("event_type", status);
-            if (errorMessage != null) {
-                log.put("error_message", errorMessage);
+            // Log to unified sms_logs table (single source of truth)
+            JSONObject smsLog = new JSONObject();
+            smsLog.put("id", java.util.UUID.randomUUID().toString());
+            smsLog.put("tenant_id", tenantId);
+            smsLog.put("user_id", userId != null ? userId : tenantId); // Use actual user_id if available, fallback to tenantId
+            smsLog.put("contact_id", contactId);
+            smsLog.put("campaign_id", campaignId);
+            smsLog.put("phone_number", phoneNumber);
+            smsLog.put("message", message != null ? message : "Marketing Campaign SMS");
+            smsLog.put("status", status.equals("sent") ? "sent" : "failed");
+            smsLog.put("channel", "marketing"); // Track source as marketing campaign
+            if (status.equals("sent")) {
+                smsLog.put("sent_at", new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).format(new java.util.Date()));
             }
+            if (errorMessage != null) {
+                smsLog.put("error_message", errorMessage);
+            }
+            smsLog.put("created_at", new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).format(new java.util.Date()));
+            
+            JSONArray result = supabase.insert("sms_logs", smsLog);
+            Log.d(TAG, "✅ SMS log inserted to unified sms_logs table");
+            Log.d(TAG, "✅ Logged " + status + " event for marketing SMS to: " + phoneNumber);
 
-            supabase.insert("marketing_logs", log);
-            Log.d(TAG, "Logged " + status + " event for: " + phoneNumber);
-
-        } catch (Exception e) {
-            Log.e(TAG, "Error logging marketing event: " + e.getMessage());
-        }
+            } catch (Exception e) {
+                Log.e(TAG, "Error logging marketing event", e);
+                if (e.getMessage() != null) {
+                    Log.e(TAG, "Error message: " + e.getMessage());
+                }
+            }
+        });
     }    /**
      * Update contact status to 'sent'
      */
     private void updateContactStatus(String contactId, String status) {
-        try {
-            SupabaseClient supabase = new SupabaseClient(this);
-            
-            // Load access token for RLS
-            SharedPreferences prefs = getSharedPreferences("marketing_prefs", Context.MODE_PRIVATE);
-            String accessToken = prefs.getString("access_token", null);
-            if (accessToken != null) {
-                supabase.setAuthToken(accessToken);
+        // Run on background thread to avoid NetworkOnMainThreadException
+        executorService.execute(() -> {
+            try {
+                SupabaseClient supabase = new SupabaseClient(this);
+                
+                // Load access token for RLS
+                SharedPreferences prefs = getSharedPreferences("marketing_prefs", Context.MODE_PRIVATE);
+                String accessToken = prefs.getString("access_token", null);
+                if (accessToken != null) {
+                    supabase.setAuthToken(accessToken);
+                }
+                
+                JSONObject update = new JSONObject();
+                update.put("status", status);
+                update.put("sent_at", "now()");
+
+                String filter = "id=eq." + contactId;
+                JSONArray result = supabase.update("marketing_campaign_contacts", filter, update);
+                Log.d(TAG, "Updated contact status to: " + status + ", result: " + result.toString());
+
+            } catch (Exception e) {
+                Log.e(TAG, "Error updating contact status", e);
+                if (e.getMessage() != null) {
+                    Log.e(TAG, "Error message: " + e.getMessage());
+                }
             }
-            
-            JSONObject update = new JSONObject();
-            update.put("status", status);
-            update.put("sent_at", "now()");
-
-            String filter = "id=eq." + contactId;
-            supabase.update("marketing_campaign_contacts", filter, update);
-            Log.d(TAG, "Updated contact status to: " + status);
-
-        } catch (Exception e) {
-            Log.e(TAG, "Error updating contact status: " + e.getMessage());
-        }
+        });
     }
 }

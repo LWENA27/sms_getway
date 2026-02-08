@@ -1,12 +1,17 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:csv/csv.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 import '../core/theme.dart';
 import '../services/local_data_service.dart';
+import '../services/csv_import_service.dart';
 import '../contacts/contact_model.dart';
 import '../groups/group_model.dart';
+import '../core/tenant_service.dart';
 import 'download_app_banner.dart';
+import 'phonebook_sync_screen.dart';
+import 'duplicate_contacts_screen.dart';
 
 class ContactsScreen extends StatefulWidget {
   const ContactsScreen({super.key});
@@ -19,8 +24,13 @@ class _ContactsScreenState extends State<ContactsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   List<Contact> contacts = [];
+  List<Contact> filteredContacts = [];
   List<Group> groups = [];
   bool isLoading = true;
+
+  // Search and filter
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   // Selection mode for bulk operations
   bool isSelectionMode = false;
@@ -49,6 +59,7 @@ class _ContactsScreenState extends State<ContactsScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -64,6 +75,7 @@ class _ContactsScreenState extends State<ContactsScreen>
       if (mounted) {
         setState(() {
           contacts = localContacts;
+          filteredContacts = localContacts;
           isLoading = false;
         });
       }
@@ -76,6 +88,20 @@ class _ContactsScreenState extends State<ContactsScreen>
         );
       }
     }
+  }
+
+  void _filterContacts(String query) {
+    setState(() {
+      _searchQuery = query.toLowerCase();
+      if (_searchQuery.isEmpty) {
+        filteredContacts = contacts;
+      } else {
+        filteredContacts = contacts.where((contact) {
+          return contact.name.toLowerCase().contains(_searchQuery) ||
+              contact.phoneNumber.toLowerCase().contains(_searchQuery);
+        }).toList();
+      }
+    });
   }
 
   void _loadGroups() async {
@@ -156,12 +182,12 @@ class _ContactsScreenState extends State<ContactsScreen>
   /// Select all contacts
   void _selectAllContacts() {
     setState(() {
-      if (selectedContactIds.length == contacts.length) {
+      if (selectedContactIds.length == filteredContacts.length) {
         // Deselect all
         selectedContactIds.clear();
       } else {
-        // Select all
-        selectedContactIds = contacts.map((c) => c.id).toSet();
+        // Select all (only from filtered contacts)
+        selectedContactIds = filteredContacts.map((c) => c.id).toSet();
       }
     });
   }
@@ -264,6 +290,176 @@ class _ContactsScreenState extends State<ContactsScreen>
     }
   }
 
+  /// Add selected contacts to a group
+  void _addSelectedContactsToGroup() async {
+    if (selectedContactIds.isEmpty) return;
+
+    // Show group selection dialog
+    final selectedGroup = await showDialog<Group>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add to Group'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Select a group to add ${selectedContactIds.length} contact${selectedContactIds.length > 1 ? 's' : ''}',
+            ),
+            const SizedBox(height: 16),
+            if (groups.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    const Text(
+                      'No groups available',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _createGroup();
+                      },
+                      icon: const Icon(Icons.add),
+                      label: const Text('Create Group'),
+                    ),
+                  ],
+                ),
+              )
+            else
+              SizedBox(
+                width: double.maxFinite,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: groups.length,
+                  itemBuilder: (context, index) {
+                    final group = groups[index];
+                    return ListTile(
+                      leading: const Icon(Icons.group),
+                      title: Text(group.name),
+                      subtitle: Text('${group.memberCount} members'),
+                      onTap: () => Navigator.pop(context, group),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+
+    if (selectedGroup == null) return;
+
+    // Show progress dialog
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        content: Row(
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Text(
+                'Adding ${selectedContactIds.length} contacts to ${selectedGroup.name}...',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      int added = 0;
+      int skipped = 0;
+      int errors = 0;
+
+      // Get existing group members
+      final existingContacts =
+          await LocalDataService().getGroupContacts(selectedGroup.id);
+      final existingIds = existingContacts.map((c) => c.id).toSet();
+
+      for (final contactId in selectedContactIds) {
+        try {
+          // Skip if already in group
+          if (existingIds.contains(contactId)) {
+            skipped++;
+            continue;
+          }
+
+          // Add member using Supabase
+          final tenantId = TenantService().tenantId;
+          final uuid = const Uuid();
+          await Supabase.instance.client
+              .schema('sms_gateway')
+              .from('group_members')
+              .insert({
+            'id': uuid.v4(),
+            'group_id': selectedGroup.id,
+            'contact_id': contactId,
+            'tenant_id': tenantId,
+            'added_at': DateTime.now().toIso8601String(),
+          });
+          added++;
+        } catch (e) {
+          errors++;
+          debugPrint('Error adding contact $contactId to group: $e');
+        }
+      }
+
+      // Close progress dialog
+      if (mounted) Navigator.pop(context);
+
+      // Exit selection mode
+      setState(() {
+        isSelectionMode = false;
+        selectedContactIds.clear();
+      });
+
+      // Show result
+      if (mounted) {
+        String message;
+        Color backgroundColor;
+
+        if (errors == 0 && skipped == 0) {
+          message =
+              '$added contact${added > 1 ? 's' : ''} added to ${selectedGroup.name}';
+          backgroundColor = Colors.green;
+        } else if (errors == 0) {
+          message = '$added added, $skipped already in group';
+          backgroundColor = Colors.blue;
+        } else {
+          message = '$added added, $skipped skipped, $errors failed';
+          backgroundColor = Colors.orange;
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: backgroundColor,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
   void _createGroup() {
     showDialog(
       context: context,
@@ -335,7 +531,7 @@ class _ContactsScreenState extends State<ContactsScreen>
     return '$_defaultCountryCode$phone';
   }
 
-  /// Import contacts from a CSV file
+  /// Import contacts from a CSV file (Enhanced with csv_import_service)
   void _importCsvContacts() async {
     try {
       // Pick CSV file
@@ -369,20 +565,18 @@ class _ContactsScreenState extends State<ContactsScreen>
             children: [
               CircularProgressIndicator(),
               SizedBox(width: 20),
-              Text('Reading file...'),
+              Text('Reading and validating file...'),
             ],
           ),
         ),
       );
 
-      // Read and parse CSV
-      final fileContent = await File(file.path!).readAsString();
-      final csvTable = const CsvToListConverter().convert(fileContent);
+      // Parse CSV using new service
+      final csvFile = File(file.path!);
+      final csvData = await CsvImportService.parseCsvFile(csvFile);
 
-      // Close loading dialog
-      if (mounted) Navigator.pop(context);
-
-      if (csvTable.isEmpty) {
+      if (csvData.isEmpty) {
+        if (mounted) Navigator.pop(context);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('CSV file is empty')),
@@ -391,69 +585,89 @@ class _ContactsScreenState extends State<ContactsScreen>
         return;
       }
 
-      // Detect header row and find columns
-      int nameIndex = 0;
-      int phoneIndex = 1;
-      int startRow = 0;
+      // Get headers and auto-detect column mapping
+      final headers = CsvImportService.getHeaders(csvData);
+      final autoMapping = CsvImportService.autoDetectMapping(headers);
 
-      if (csvTable.isNotEmpty) {
-        final firstRow = csvTable[0];
-        for (int i = 0; i < firstRow.length; i++) {
-          final cell = firstRow[i].toString().toLowerCase().trim();
-          if (cell.contains('name')) {
-            nameIndex = i;
-            startRow = 1;
-          } else if (cell.contains('phone') ||
-              cell.contains('number') ||
-              cell.contains('mobile')) {
-            phoneIndex = i;
-            startRow = 1;
-          }
+      // Show column mapping dialog if no auto-detection
+      Map<String, int>? columnMapping = autoMapping;
+
+      if (autoMapping['phone'] == null) {
+        // Need manual mapping - show dialog
+        if (mounted) Navigator.pop(context);
+        columnMapping = await _showColumnMappingDialog(headers);
+        if (columnMapping == null || columnMapping['phone'] == null) {
+          return; // User cancelled or didn't map phone
         }
+        // Show loading again
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const AlertDialog(
+            content: Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 20),
+                Text('Validating contacts...'),
+              ],
+            ),
+          ),
+        );
       }
 
-      // Parse contacts for preview
-      List<Map<String, String>> parsedContacts = [];
-      List<String> warnings = [];
+      // Initialize tenant service
+      final tenantService = TenantService();
+      await tenantService.initialize();
+      final tenantId = tenantService.currentTenant?.id;
 
-      for (int i = startRow; i < csvTable.length; i++) {
-        final row = csvTable[i];
-        if (row.length < 2) continue;
-
-        String name = row[nameIndex].toString().trim();
-        String rawPhone = row[phoneIndex].toString().trim();
-        String formattedPhone = _formatPhoneNumber(rawPhone);
-
-        if (name.isEmpty || formattedPhone.isEmpty) {
-          warnings.add('Row ${i + 1}: Missing name or phone');
-          continue;
-        }
-
-        // Validate phone (at least 10 digits for international)
-        if (formattedPhone.replaceAll('+', '').length < 10) {
-          warnings.add('Row ${i + 1}: Invalid phone "$rawPhone"');
-          continue;
-        }
-
-        parsedContacts.add({
-          'name': name,
-          'phone': formattedPhone,
-          'original': rawPhone,
-        });
+      if (tenantId == null) {
+        if (mounted) Navigator.pop(context);
+        throw Exception('No tenant selected');
       }
 
-      if (parsedContacts.isEmpty) {
+      // Map and validate using PhoneValidator
+      final importResults = await CsvImportService.mapAndValidate(
+        csvData: csvData,
+        columnMapping: columnMapping,
+        tenantId: tenantId,
+      );
+
+      // Load existing contacts for duplicate detection
+      final existingContacts = await LocalDataService().getContacts();
+
+      // Detect duplicates
+      final duplicates = await CsvImportService.detectDuplicates(
+        importResults: importResults,
+        existingContacts: existingContacts,
+      );
+
+      // Close loading dialog
+      if (mounted) Navigator.pop(context);
+
+      // Get summary
+      final summary = CsvImportService.getSummary(importResults);
+
+      if (summary.valid == 0) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No valid contacts found in file')),
+            SnackBar(
+              content:
+                  Text('No valid contacts found. ${summary.errors} errors.'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
         return;
       }
 
-      // Show confirmation screen
+      // Show enhanced import confirmation with validation results
       if (mounted) {
-        _showImportConfirmation(parsedContacts, warnings, 'CSV');
+        _showEnhancedImportConfirmation(
+          importResults,
+          duplicates,
+          summary,
+        );
       }
     } catch (e) {
       if (mounted && Navigator.canPop(context)) {
@@ -464,6 +678,481 @@ class _ContactsScreenState extends State<ContactsScreen>
           SnackBar(content: Text('Import error: $e')),
         );
       }
+    }
+  }
+
+  /// Show column mapping dialog for manual selection
+  Future<Map<String, int>?> _showColumnMappingDialog(
+      List<String> headers) async {
+    int? phoneIndex;
+    int? firstNameIndex;
+    int? lastNameIndex;
+
+    return showDialog<Map<String, int>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Map CSV Columns'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Select which columns contain contact information:',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+
+                // Phone Number (Required)
+                const Text('Phone Number *',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<int>(
+                  value: phoneIndex,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  items: headers.asMap().entries.map((entry) {
+                    return DropdownMenuItem(
+                      value: entry.key,
+                      child: Text(entry.value),
+                    );
+                  }).toList(),
+                  onChanged: (value) => setState(() => phoneIndex = value),
+                ),
+                const SizedBox(height: 16),
+
+                // First Name (Optional)
+                const Text('First Name (optional)',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<int?>(
+                  value: firstNameIndex,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('(Skip)')),
+                    ...headers.asMap().entries.map((entry) {
+                      return DropdownMenuItem(
+                        value: entry.key,
+                        child: Text(entry.value),
+                      );
+                    }),
+                  ],
+                  onChanged: (value) => setState(() => firstNameIndex = value),
+                ),
+                const SizedBox(height: 16),
+
+                // Last Name (Optional)
+                const Text('Last Name (optional)',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<int?>(
+                  value: lastNameIndex,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('(Skip)')),
+                    ...headers.asMap().entries.map((entry) {
+                      return DropdownMenuItem(
+                        value: entry.key,
+                        child: Text(entry.value),
+                      );
+                    }),
+                  ],
+                  onChanged: (value) => setState(() => lastNameIndex = value),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: phoneIndex == null
+                  ? null
+                  : () {
+                      final mapping = <String, int>{'phone': phoneIndex!};
+                      if (firstNameIndex != null)
+                        mapping['firstName'] = firstNameIndex!;
+                      if (lastNameIndex != null)
+                        mapping['lastName'] = lastNameIndex!;
+                      Navigator.pop(context, mapping);
+                    },
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Show enhanced import confirmation with validation results
+  void _showEnhancedImportConfirmation(
+    List<ImportContactResult> importResults,
+    Set<String> duplicates,
+    ImportSummary summary,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (_, scrollController) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              // Handle
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+
+              // Summary Card
+              Card(
+                margin: const EdgeInsets.all(16),
+                color: Colors.blue.shade50,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.table_chart,
+                              color: AppTheme.primaryColor),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Import from CSV',
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
+                                Text(
+                                  '${summary.total} contacts processed',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _buildStatColumn(
+                              'Valid', summary.valid, Colors.green),
+                          _buildStatColumn(
+                              'Errors', summary.errors, Colors.red),
+                          _buildStatColumn(
+                              'Warnings', summary.warnings, Colors.orange),
+                          _buildStatColumn(
+                              'Duplicates', duplicates.length, Colors.blue),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      LinearProgressIndicator(
+                        value: summary.successRate / 100,
+                        backgroundColor: Colors.grey.shade200,
+                        valueColor: const AlwaysStoppedAnimation(Colors.green),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${summary.successRate.toStringAsFixed(1)}% success rate',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Duplicates warning
+              if (duplicates.isNotEmpty)
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber,
+                          color: Colors.orange, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${duplicates.length} contacts already exist and will be skipped',
+                          style: const TextStyle(
+                              color: Colors.orange, fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              const SizedBox(height: 8),
+              const Divider(),
+
+              // Results list
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollController,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: importResults.length,
+                  itemBuilder: (context, index) {
+                    final result = importResults[index];
+                    final isDuplicate =
+                        duplicates.contains(result.phoneNormalized);
+
+                    IconData icon;
+                    Color color;
+
+                    if (!result.isValid) {
+                      icon = Icons.error;
+                      color = Colors.red;
+                    } else if (isDuplicate) {
+                      icon = Icons.content_copy;
+                      color = Colors.blue;
+                    } else if (result.hasWarning) {
+                      icon = Icons.warning_amber;
+                      color = Colors.orange;
+                    } else {
+                      icon = Icons.check_circle;
+                      color = Colors.green;
+                    }
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: Icon(icon, color: color, size: 20),
+                        title: Text(result.displayName),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(result.phoneNormalized ??
+                                result.phoneRaw ??
+                                ''),
+                            if (result.error != null)
+                              Text(
+                                result.error!,
+                                style: TextStyle(color: color, fontSize: 11),
+                              ),
+                            if (isDuplicate && result.error == null)
+                              const Text(
+                                'Already exists (will be skipped)',
+                                style:
+                                    TextStyle(color: Colors.blue, fontSize: 11),
+                              ),
+                          ],
+                        ),
+                        trailing: Text(
+                          'Row ${result.rowNumber}',
+                          style:
+                              const TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              // Action buttons
+              SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancel'),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton.icon(
+                          onPressed: summary.valid > 0
+                              ? () {
+                                  Navigator.pop(context);
+                                  _executeEnhancedImport(
+                                      importResults, duplicates);
+                                }
+                              : null,
+                          icon: const Icon(Icons.download),
+                          label: Text(
+                              'Import ${summary.valid - duplicates.length} Contacts'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatColumn(String label, int value, Color color) {
+    return Column(
+      children: [
+        Text(
+          value.toString(),
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 11, color: Colors.grey),
+        ),
+      ],
+    );
+  }
+
+  /// Execute enhanced import with proper Contact model
+  void _executeEnhancedImport(
+    List<ImportContactResult> importResults,
+    Set<String> duplicates,
+  ) async {
+    // Show progress dialog
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Text('Importing contacts...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      int imported = 0;
+      int skipped = 0;
+      int errors = 0;
+      List<String> errorMessages = [];
+
+      // Filter out invalid and duplicate contacts
+      final validResults = importResults
+          .where((r) =>
+              r.isValid &&
+              !duplicates.contains(r.phoneNormalized) &&
+              r.contact != null)
+          .toList();
+
+      for (int i = 0; i < validResults.length; i++) {
+        final result = validResults[i];
+        final contact = result.contact!;
+
+        try {
+          // Use the full name or combine first/last names
+          final name = contact.fullName.isNotEmpty
+              ? contact.fullName
+              : contact.phoneNumber;
+
+          await LocalDataService().addContact(
+            name: name,
+            phoneNumber: contact.phoneNumber,
+          );
+          imported++;
+        } catch (e) {
+          if (e.toString().contains('duplicate') ||
+              e.toString().contains('unique') ||
+              e.toString().contains('UNIQUE')) {
+            skipped++;
+            errorMessages.add('Row ${result.rowNumber}: Duplicate');
+          } else {
+            errors++;
+            errorMessages.add('Row ${result.rowNumber}: $e');
+          }
+        }
+      }
+
+      // Close progress dialog
+      if (mounted) Navigator.pop(context);
+
+      // Reload contacts
+      _loadContacts();
+
+      // Show result
+      if (mounted) {
+        _showImportResultDialog(
+          imported,
+          skipped + duplicates.length,
+          errors,
+          errorMessages,
+        );
+      }
+    } catch (e) {
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Import error: $e')),
+        );
+      }
+    }
+  }
+
+  /// Sync contacts from device phonebook
+  void _syncPhonebook() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const PhonebookSyncScreen()),
+    );
+
+    // Reload contacts if sync was successful
+    if (result == true) {
+      _loadContacts();
+    }
+  }
+
+  /// Navigate to duplicate detection screen
+  void _findDuplicates() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const DuplicateContactsScreen()),
+    );
+
+    // Reload contacts if duplicates were merged
+    if (result == true) {
+      _loadContacts();
     }
   }
 
@@ -1003,12 +1692,31 @@ class _ContactsScreenState extends State<ContactsScreen>
               },
             ),
             ListTile(
+              leading: const Icon(Icons.contacts),
+              title: const Text('Sync from Phonebook'),
+              subtitle: const Text('Import contacts from device phonebook'),
+              onTap: () {
+                Navigator.pop(context);
+                _syncPhonebook();
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.contact_phone),
               title: const Text('Import from VCF'),
               subtitle: const Text('Import contacts from vCard file'),
               onTap: () {
                 Navigator.pop(context);
                 _importVcfContacts();
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.merge_type, color: Colors.orange),
+              title: const Text('Find Duplicates'),
+              subtitle: const Text('Detect and merge duplicate contacts'),
+              onTap: () {
+                Navigator.pop(context);
+                _findDuplicates();
               },
             ),
           ],
@@ -1077,14 +1785,21 @@ class _ContactsScreenState extends State<ContactsScreen>
       title: Text('${selectedContactIds.length} selected'),
       elevation: 0,
       actions: [
+        // Add to group button
+        IconButton(
+          icon: const Icon(Icons.group_add),
+          tooltip: 'Add to group',
+          onPressed:
+              selectedContactIds.isEmpty ? null : _addSelectedContactsToGroup,
+        ),
         // Select all button
         IconButton(
           icon: Icon(
-            selectedContactIds.length == contacts.length
+            selectedContactIds.length == filteredContacts.length
                 ? Icons.deselect
                 : Icons.select_all,
           ),
-          tooltip: selectedContactIds.length == contacts.length
+          tooltip: selectedContactIds.length == filteredContacts.length
               ? 'Deselect all'
               : 'Select all',
           onPressed: _selectAllContacts,
@@ -1241,52 +1956,116 @@ class _ContactsScreenState extends State<ContactsScreen>
       );
     }
 
-    return ListView.builder(
-      itemCount: contacts.length,
-      itemBuilder: (context, index) {
-        final contact = contacts[index];
-        final isSelected = selectedContactIds.contains(contact.id);
+    return Column(
+      children: [
+        // Search bar
+        Padding(
+          padding: const EdgeInsets.all(AppTheme.paddingMedium),
+          child: TextField(
+            controller: _searchController,
+            onChanged: _filterContacts,
+            decoration: InputDecoration(
+              hintText: 'Search contacts by name or number',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _searchController.clear();
+                        _filterContacts('');
+                      },
+                    )
+                  : null,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              filled: true,
+              fillColor: Colors.grey.shade100,
+            ),
+          ),
+        ),
+        // Contact list
+        Expanded(
+          child: filteredContacts.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.search_off,
+                        size: 64,
+                        color: Colors.grey.shade400,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No contacts found',
+                        style: TextStyle(
+                          fontSize: 18,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Try adjusting your search',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: filteredContacts.length,
+                  itemBuilder: (context, index) {
+                    final contact = filteredContacts[index];
+                    final isSelected = selectedContactIds.contains(contact.id);
 
-        return Card(
-          margin: const EdgeInsets.symmetric(
-            horizontal: AppTheme.paddingMedium,
-            vertical: AppTheme.paddingSmall,
-          ),
-          color: isSelected
-              ? Theme.of(context).colorScheme.primaryContainer
-              : null,
-          child: ListTile(
-            leading: isSelectionMode
-                ? Checkbox(
-                    value: isSelected,
-                    onChanged: (_) => _toggleContactSelection(contact.id),
-                  )
-                : CircleAvatar(
-                    child: Text(contact.name[0].toUpperCase()),
-                  ),
-            title: Text(contact.name),
-            subtitle: Text(contact.phoneNumber),
-            trailing: isSelectionMode
-                ? null
-                : IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red),
-                    onPressed: () => _deleteContact(contact.id),
-                  ),
-            onTap: isSelectionMode
-                ? () => _toggleContactSelection(contact.id)
-                : null,
-            onLongPress: isSelectionMode
-                ? null
-                : () {
-                    // Enter selection mode on long press
-                    setState(() {
-                      isSelectionMode = true;
-                      selectedContactIds.add(contact.id);
-                    });
+                    return Card(
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: AppTheme.paddingMedium,
+                        vertical: AppTheme.paddingSmall,
+                      ),
+                      color: isSelected
+                          ? Theme.of(context).colorScheme.primaryContainer
+                          : null,
+                      child: ListTile(
+                        leading: isSelectionMode
+                            ? Checkbox(
+                                value: isSelected,
+                                onChanged: (_) =>
+                                    _toggleContactSelection(contact.id),
+                              )
+                            : CircleAvatar(
+                                child: Text(contact.name[0].toUpperCase()),
+                              ),
+                        title: Text(contact.name),
+                        subtitle: Text(contact.phoneNumber),
+                        trailing: isSelectionMode
+                            ? null
+                            : IconButton(
+                                icon:
+                                    const Icon(Icons.delete, color: Colors.red),
+                                onPressed: () => _deleteContact(contact.id),
+                              ),
+                        onTap: isSelectionMode
+                            ? () => _toggleContactSelection(contact.id)
+                            : null,
+                        onLongPress: isSelectionMode
+                            ? null
+                            : () {
+                                // Enter selection mode on long press
+                                setState(() {
+                                  isSelectionMode = true;
+                                  selectedContactIds.add(contact.id);
+                                });
+                              },
+                      ),
+                    );
                   },
-          ),
-        );
-      },
+                ),
+        ),
+      ],
     );
   }
 

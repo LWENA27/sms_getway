@@ -219,20 +219,39 @@ class SettingsBackupService extends ChangeNotifier {
         direction: 'local_to_remote',
       );
 
-      // Update tenant settings in Supabase
-      await _supabase.from('sms_gateway.tenant_settings').upsert({
-        'tenant_id': tenantId,
-        'default_sms_channel': tenantSettings['default_sms_channel'],
-        'daily_sms_quota': tenantSettings['daily_sms_quota'],
-        'monthly_sms_quota': tenantSettings['monthly_sms_quota'],
-        'enable_bulk_sms': tenantSettings['enable_bulk_sms'],
-        'enable_scheduled_sms': tenantSettings['enable_scheduled_sms'],
-        'enable_sms_groups': tenantSettings['enable_sms_groups'],
-        'enable_api_access': tenantSettings['enable_api_access'],
-        'plan_type': tenantSettings['plan_type'],
-        'updated_by': userId,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).select();
+      // Update tenant settings in Supabase (upsert using onConflict)
+      try {
+        await _supabase.schema('sms_gateway').from('tenant_settings').upsert(
+          {
+            'tenant_id': tenantId,
+            'default_sms_channel': tenantSettings['default_sms_channel'],
+            'daily_sms_quota': tenantSettings['daily_sms_quota'],
+            'monthly_sms_quota': tenantSettings['monthly_sms_quota'],
+            'enable_bulk_sms': tenantSettings['enable_bulk_sms'],
+            'enable_scheduled_sms': tenantSettings['enable_scheduled_sms'],
+            'enable_sms_groups': tenantSettings['enable_sms_groups'],
+            'enable_api_access': tenantSettings['enable_api_access'],
+            'plan_type': tenantSettings['plan_type'],
+            'updated_by': userId,
+            'updated_at': DateTime.now().toIso8601String(),
+          },
+        ).eq('tenant_id', tenantId);
+      } catch (e) {
+        // If upsert fails due to conflict, try update instead
+        debugPrint('⚠️ Upsert failed, trying update: $e');
+        await _supabase.schema('sms_gateway').from('tenant_settings').update({
+          'default_sms_channel': tenantSettings['default_sms_channel'],
+          'daily_sms_quota': tenantSettings['daily_sms_quota'],
+          'monthly_sms_quota': tenantSettings['monthly_sms_quota'],
+          'enable_bulk_sms': tenantSettings['enable_bulk_sms'],
+          'enable_scheduled_sms': tenantSettings['enable_scheduled_sms'],
+          'enable_sms_groups': tenantSettings['enable_sms_groups'],
+          'enable_api_access': tenantSettings['enable_api_access'],
+          'plan_type': tenantSettings['plan_type'],
+          'updated_by': userId,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('tenant_id', tenantId);
+      }
 
       await _completeSync(syncLogId, 'success');
 
@@ -280,7 +299,8 @@ class SettingsBackupService extends ChangeNotifier {
 
       // Get tenant settings from Supabase
       final response = await _supabase
-          .from('sms_gateway.tenant_settings')
+          .schema('sms_gateway')
+          .from('tenant_settings')
           .select()
           .eq('tenant_id', tenantId)
           .single();

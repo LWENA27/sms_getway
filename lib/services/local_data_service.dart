@@ -704,6 +704,33 @@ class LocalDataService {
     return db!.getPendingSyncCount(tenantId);
   }
 
+  /// ⚠️ EMERGENCY FIX: Mark all pending contacts as synced
+  /// Use this if you have contacts stuck in pending_create that already exist in Supabase
+  Future<int> markAllContactsAsSynced() async {
+    final tenantId = TenantService().tenantId;
+    if (tenantId == null) return 0;
+
+    if (db == null) return 0;
+
+    debugPrint('🔧 Marking all pending contacts as synced...');
+
+    // Get all pending contacts
+    final pending = await db!.getPendingContacts(tenantId);
+    debugPrint('📊 Found ${pending.length} contacts with pending status');
+
+    if (pending.isEmpty) {
+      debugPrint('✅ No pending contacts to fix');
+      return 0;
+    }
+
+    // Mark them all as synced
+    final ids = pending.map((c) => c.id).toList();
+    await db!.markContactsSynced(ids);
+
+    debugPrint('✅ Marked ${ids.length} contacts as synced');
+    return ids.length;
+  }
+
   // ============================================================================
   // SYNC
   // ============================================================================

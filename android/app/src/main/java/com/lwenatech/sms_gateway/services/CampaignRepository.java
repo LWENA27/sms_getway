@@ -91,45 +91,64 @@ public class CampaignRepository {
             }
             
             // Step 3: Get pending contacts for these campaigns
+            // Fetch contacts up to the requested limit (respecting daily capacity)
+            // Note: Supabase has a 1000 row limit per query, so we'll fetch in batches if needed
             String campaignIdsStr = String.join(",", campaignIdList);
-            String contactFilter = "campaign_id=in.(" + campaignIdsStr + ")" +
-                                  "&status=eq.pending" +
-                                  "&select=id,campaign_id,phone_number,first_name,last_name" +
-                                  "&order=created_at" +
-                                  "&limit=" + limit;
-            
-            android.util.Log.i(TAG, "Contact query filter: " + contactFilter);
-            JSONArray contacts = supabase.select("marketing_campaign_contacts", contactFilter);
-            android.util.Log.i(TAG, "Found " + contacts.length() + " pending contacts");
-            
-            if (contacts.length() == 0) {
-                return new ArrayList<>();
-            }
-            
-            // Step 4: Merge contact data with campaign data
             List<Map<String, String>> result = new ArrayList<>();
-            for (int i = 0; i < contacts.length(); i++) {
-                JSONObject contact = contacts.getJSONObject(i);
-                String campaignId = contact.getString("campaign_id");
+            int offset = 0;
+            int batchSize = 1000; // Supabase max per query
+            
+            while (result.size() < limit) {
+                int remainingNeeded = limit - result.size();
+                int fetchSize = Math.min(remainingNeeded, batchSize);
                 
-                if (campaignMap.containsKey(campaignId)) {
-                    Map<String, String> contactMap = new HashMap<>();
-                    contactMap.put("id", contact.optString("id"));
-                    contactMap.put("campaign_id", campaignId);
-                    contactMap.put("phone_number", contact.optString("phone_number"));
-                    contactMap.put("first_name", contact.optString("first_name"));
-                    contactMap.put("last_name", contact.optString("last_name"));
-                    
-                    // Add campaign details
-                    JSONObject campaign = campaignMap.get(campaignId);
-                    contactMap.put("message_template", campaign.optString("message_template"));
-                    contactMap.put("activated_at", campaign.optString("activated_at"));
-                    
-                    result.add(contactMap);
+                String contactFilter = "campaign_id=in.(" + campaignIdsStr + ")" +
+                                      "&status=eq.pending" +
+                                      "&select=id,campaign_id,phone_number,first_name,last_name" +
+                                      "&order=created_at" +
+                                      "&limit=" + fetchSize +
+                                      "&offset=" + offset;
+                
+                android.util.Log.d(TAG, "Fetching contacts: limit=" + fetchSize + ", offset=" + offset);
+                JSONArray contacts = supabase.select("marketing_campaign_contacts", contactFilter);
+                android.util.Log.d(TAG, "Fetched " + contacts.length() + " contacts in this batch");
+                
+                if (contacts.length() == 0) {
+                    // No more contacts to fetch
+                    break;
                 }
+                
+                // Step 4: Merge contact data with campaign data
+                for (int i = 0; i < contacts.length(); i++) {
+                    JSONObject contact = contacts.getJSONObject(i);
+                    String campaignId = contact.getString("campaign_id");
+                    
+                    if (campaignMap.containsKey(campaignId)) {
+                        Map<String, String> contactMap = new HashMap<>();
+                        contactMap.put("id", contact.optString("id"));
+                        contactMap.put("campaign_id", campaignId);
+                        contactMap.put("phone_number", contact.optString("phone_number"));
+                        contactMap.put("first_name", contact.optString("first_name"));
+                        contactMap.put("last_name", contact.optString("last_name"));
+                        
+                        // Add campaign details
+                        JSONObject campaign = campaignMap.get(campaignId);
+                        contactMap.put("message_template", campaign.optString("message_template"));
+                        contactMap.put("activated_at", campaign.optString("activated_at"));
+                        
+                        result.add(contactMap);
+                    }
+                }
+                
+                // If we got fewer contacts than requested, we've reached the end
+                if (contacts.length() < fetchSize) {
+                    break;
+                }
+                
+                offset += contacts.length();
             }
             
-            android.util.Log.i(TAG, "Returning " + result.size() + " contacts with active campaigns");
+            android.util.Log.i(TAG, "Total pending contacts fetched: " + result.size());
             return result;
             
         } catch (Exception e) {
@@ -348,6 +367,9 @@ public class CampaignRepository {
     /**
      * Get campaign statistics
      * 
+     * Uses Supabase aggregation queries to count contacts by status.
+     * This avoids the 1000 row limit by using COUNT queries instead of fetching all rows.
+     * 
      * @param campaignId Campaign UUID
      * @return Stats map (total, sent, failed, skipped, pending)
      */
@@ -355,23 +377,18 @@ public class CampaignRepository {
         try {
             android.util.Log.d(TAG, "Fetching campaign stats: " + campaignId);
             
-            String filter = "campaign_id=eq." + campaignId;
-            
-            // Get all contacts and count by status
-            JSONArray contacts = supabase.select("marketing_campaign_contacts", 
-                filter + "&select=status");
+            String baseFilter = "campaign_id=eq." + campaignId;
             
             Map<String, Integer> stats = new HashMap<>();
-            stats.put("total", contacts.length());
-            stats.put("sent", 0);
-            stats.put("failed", 0);
-            stats.put("skipped", 0);
-            stats.put("pending", 0);
             
-            for (int i = 0; i < contacts.length(); i++) {
-                String status = contacts.getJSONObject(i).getString("status");
-                stats.put(status, stats.get(status) + 1);
-            }
+            // Use COUNT queries for each status to avoid 1000 row limit
+            stats.put("total", supabase.count("marketing_campaign_contacts", baseFilter));
+            stats.put("sent", supabase.count("marketing_campaign_contacts", baseFilter + "&status=eq.sent"));
+            stats.put("failed", supabase.count("marketing_campaign_contacts", baseFilter + "&status=eq.failed"));
+            stats.put("skipped", supabase.count("marketing_campaign_contacts", baseFilter + "&status=eq.skipped"));
+            stats.put("pending", supabase.count("marketing_campaign_contacts", baseFilter + "&status=eq.pending"));
+            
+            android.util.Log.d(TAG, "Campaign stats: " + stats.toString());
             
             return stats;
             

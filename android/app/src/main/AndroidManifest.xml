@@ -6,6 +6,13 @@
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     
+    <!-- Contacts Permission for Phonebook Sync -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    
+    <!-- Storage Permission for CSV Import (Android < 10) -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" 
+                     android:maxSdkVersion="32" />
+    
     <!-- Internet Permission -->
     <uses-permission android:name="android.permission.INTERNET" />
     

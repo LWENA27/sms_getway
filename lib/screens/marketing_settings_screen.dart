@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:io';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:sms_gateway/services/marketing_service.dart';
 import 'package:sms_gateway/core/tenant_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -68,16 +71,47 @@ class _MarketingSettingsScreenState extends State<MarketingSettingsScreen> {
   Future<void> _toggleMarketing(bool value) async {
     if (_tenantId == null) return;
 
+    // Check SMS permission on Android when enabling
+    if (value) {
+      final bool isAndroid = !kIsWeb && Platform.isAndroid;
+      if (isAndroid) {
+        final status = await Permission.sms.request();
+        if (!status.isGranted) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text(
+                    '❌ SMS permission is required for marketing automation'),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 5),
+                action: SnackBarAction(
+                  label: 'Settings',
+                  textColor: Colors.white,
+                  onPressed: () => openAppSettings(),
+                ),
+              ),
+            );
+          }
+          return; // Don't enable without permission
+        }
+      }
+    }
+
     setState(() => _isLoading = true);
 
     try {
       bool success;
       if (value) {
-        // Get current user's access token for RLS
+        // Get current user's access token and ID for RLS
         final session = Supabase.instance.client.auth.currentSession;
         final accessToken = session?.accessToken;
+        final userId = Supabase.instance.client.auth.currentUser?.id;
 
-        success = await _marketingService.enableMarketing(_tenantId!,
+        if (userId == null) {
+          throw Exception('User not authenticated');
+        }
+
+        success = await _marketingService.enableMarketing(_tenantId!, userId,
             dailyLimit: _dailyLimit, accessToken: accessToken);
       } else {
         success = await _marketingService.disableMarketing();

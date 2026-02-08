@@ -1,11 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <!-- Include only shared preferences -->
+    <!-- Include shared preferences -->
     <include domain="sharedpref" path="."/>
-    
-    <!-- Exclude databases (local cache) -->
-    <exclude domain="database" path="."/>
-    
-    <!-- Exclude cache and temp files -->
-    <exclude domain="file" path="cache"/>
 </full-backup-content>

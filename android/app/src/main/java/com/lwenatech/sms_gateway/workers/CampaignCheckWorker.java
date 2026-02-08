@@ -35,7 +35,6 @@ public class CampaignCheckWorker extends Worker {
     
     private static final String TAG = "CampaignCheckWorker";
     private static final String PREFS_NAME = "marketing_prefs";
-    private static final int BATCH_SIZE = 10; // Process 10 contacts per run
     
     public CampaignCheckWorker(
         @NonNull Context context,
@@ -71,10 +70,22 @@ public class CampaignCheckWorker extends Worker {
                 return Result.failure();
             }
             
-            // Step 4: Fetch pending campaign contacts from Supabase
+            // Step 4: Calculate remaining capacity for today
+            int dailyLimit = getDailyLimit(context);
+            int todayCount = getTodayCount(context);
+            int remainingCapacity = Math.max(0, dailyLimit - todayCount);
+            
+            if (remainingCapacity == 0) {
+                android.util.Log.i(TAG, "No remaining capacity today (" + todayCount + "/" + dailyLimit + ")");
+                return Result.success();
+            }
+            
+            android.util.Log.i(TAG, "Remaining capacity: " + remainingCapacity + " (sent: " + todayCount + "/" + dailyLimit + ")");
+            
+            // Step 5: Fetch pending campaign contacts from Supabase (up to remaining capacity)
             CampaignRepository repository = new CampaignRepository(context);
             java.util.List<java.util.Map<String, String>> pendingContacts = 
-                repository.getPendingContacts(tenantId, BATCH_SIZE);
+                repository.getPendingContacts(tenantId, remainingCapacity);
             
             if (pendingContacts == null || pendingContacts.isEmpty()) {
                 android.util.Log.i(TAG, "No pending contacts - skipping");
@@ -83,10 +94,10 @@ public class CampaignCheckWorker extends Worker {
             
             android.util.Log.i(TAG, "Found " + pendingContacts.size() + " pending contacts");
             
-            // Step 5: Schedule individual SMS workers with staggered delays
+            // Step 6: Schedule individual SMS workers with staggered delays
             scheduleSmsWorkers(context, tenantId, pendingContacts);
             
-            android.util.Log.i(TAG, "Scheduled " + BATCH_SIZE + " SMS workers");
+            android.util.Log.i(TAG, "✅ Scheduled " + pendingContacts.size() + " SMS workers for delivery");
             return Result.success();
             
         } catch (Exception e) {
@@ -126,6 +137,36 @@ public class CampaignCheckWorker extends Worker {
         }
         
         return dailySentCount >= dailyLimit;
+    }
+    
+    /**
+     * Get daily sending limit from settings
+     */
+    private int getDailyLimit(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        return prefs.getInt("daily_limit", 100);
+    }
+    
+    /**
+     * Get count of SMS sent today
+     */
+    private int getTodayCount(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        
+        // Check if we need to reset counter (new day)
+        String lastResetDate = prefs.getString("last_reset_date", "");
+        String today = java.time.LocalDate.now().toString();
+        
+        if (!today.equals(lastResetDate)) {
+            // New day - reset counter
+            SharedPreferences.Editor editor = prefs.edit();
+            editor.putInt("daily_sent_count", 0);
+            editor.putString("last_reset_date", today);
+            editor.apply();
+            return 0;
+        }
+        
+        return prefs.getInt("daily_sent_count", 0);
     }
     
     /**

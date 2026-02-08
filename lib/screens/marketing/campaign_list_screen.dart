@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:io';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/marketing_campaign.dart';
 import '../../core/tenant_service.dart';
+import '../../services/marketing_service.dart';
 import 'campaign_create_screen.dart';
 
 /// Campaign List Screen
@@ -16,14 +20,31 @@ class CampaignListScreen extends StatefulWidget {
 class _CampaignListScreenState extends State<CampaignListScreen> {
   final _supabase = Supabase.instance.client;
   final _tenantService = TenantService();
+  final _marketingService = MarketingService();
   List<MarketingCampaign> _campaigns = [];
   bool _loading = true;
   String? _error;
+  bool _marketingEnabled = false;
+  Map<String, dynamic>? _marketingSettings;
 
   @override
   void initState() {
     super.initState();
     _loadCampaigns();
+    _loadMarketingStatus();
+  }
+
+  Future<void> _loadMarketingStatus() async {
+    try {
+      final enabled = await _marketingService.isMarketingEnabled();
+      final settings = await _marketingService.getSettings();
+      setState(() {
+        _marketingEnabled = enabled;
+        _marketingSettings = settings;
+      });
+    } catch (e) {
+      debugPrint('Error loading marketing status: $e');
+    }
   }
 
   Future<void> _loadCampaigns() async {
@@ -44,7 +65,8 @@ class _CampaignListScreenState extends State<CampaignListScreen> {
           .from('marketing_campaigns')
           .select()
           .eq('tenant_id', tenantId)
-          .order('created_at', ascending: false);
+          .order('created_at', ascending: false)
+          .limit(10000); // Allow up to 10k campaigns
 
       final campaigns = (response as List)
           .map((json) => MarketingCampaign.fromJson(json))
@@ -64,12 +86,38 @@ class _CampaignListScreenState extends State<CampaignListScreen> {
 
   Future<void> _toggleCampaignStatus(MarketingCampaign campaign) async {
     String newStatus;
-    if (campaign.isActive) {
-      newStatus = 'paused';
+    if (campaign.isDraft) {
+      newStatus = 'active'; // Activate draft campaign
+    } else if (campaign.isActive) {
+      newStatus = 'paused'; // Pause active campaign
     } else if (campaign.isPaused) {
-      newStatus = 'active';
+      newStatus = 'active'; // Resume paused campaign
     } else {
-      return; // Can't toggle draft or completed
+      return; // Can't toggle completed or cancelled
+    }
+
+    // If activating campaign, check SMS permission on Android
+    if (newStatus == 'active') {
+      final bool isAndroid = !kIsWeb && Platform.isAndroid;
+      if (isAndroid) {
+        final status = await Permission.sms.request();
+        if (!status.isGranted) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('❌ SMS permission is required to send marketing campaigns'),
+                backgroundColor: Colors.red,
+                action: SnackBarAction(
+                  label: 'Settings',
+                  textColor: Colors.white,
+                  onPressed: () => openAppSettings(),
+                ),
+              ),
+            );
+          }
+          return; // Don't activate without permission
+        }
+      }
     }
 
     try {
@@ -86,7 +134,9 @@ class _CampaignListScreenState extends State<CampaignListScreen> {
           SnackBar(
             content: Text(
               newStatus == 'active'
-                  ? '✅ Campaign activated'
+                  ? (campaign.isDraft
+                      ? '✅ Campaign activated'
+                      : '▶️ Campaign resumed')
                   : '⏸️ Campaign paused',
             ),
           ),
@@ -230,12 +280,20 @@ class _CampaignListScreenState extends State<CampaignListScreen> {
     }
 
     return RefreshIndicator(
-      onRefresh: _loadCampaigns,
+      onRefresh: () async {
+        await _loadCampaigns();
+        await _loadMarketingStatus();
+      },
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: _campaigns.length,
+        itemCount: _campaigns.length + 1, // +1 for status banner
         itemBuilder: (context, index) {
-          final campaign = _campaigns[index];
+          // Status banner at top
+          if (index == 0) {
+            return _buildStatusBanner();
+          }
+
+          final campaign = _campaigns[index - 1];
           return _CampaignCard(
             campaign: campaign,
             onToggle: () => _toggleCampaignStatus(campaign),
@@ -254,6 +312,105 @@ class _CampaignListScreenState extends State<CampaignListScreen> {
             },
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildStatusBanner() {
+    if (!_marketingEnabled) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.orange.shade50,
+          border: Border.all(color: Colors.orange),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '⚠️ Marketing Automation Disabled',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange.shade900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Campaigns won\'t send SMS. Enable in Marketing Settings.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.orange.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Show daily limit status if enabled
+    final dailyLimit = _marketingSettings?['daily_limit'] as int? ?? 100;
+    final dailySent = _marketingSettings?['daily_sent_count'] as int? ?? 0;
+    final percentage = (dailySent / dailyLimit * 100).round();
+
+    MaterialColor statusColor = Colors.green;
+    String statusText = '✅ Marketing Active';
+    IconData statusIcon = Icons.check_circle;
+
+    if (percentage >= 100) {
+      statusColor = Colors.red;
+      statusText = '🛑 Daily Limit Reached';
+      statusIcon = Icons.block;
+    } else if (percentage >= 80) {
+      statusColor = Colors.orange;
+      statusText = '⚠️ Approaching Daily Limit';
+      statusIcon = Icons.warning_amber_rounded;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: statusColor.shade50,
+        border: Border.all(color: statusColor),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(statusIcon, color: statusColor.shade700),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  statusText,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: statusColor.shade900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Today: $dailySent / $dailyLimit SMS sent ($percentage%)',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: statusColor.shade700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

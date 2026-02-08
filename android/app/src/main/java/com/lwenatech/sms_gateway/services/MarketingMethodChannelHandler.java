@@ -90,15 +90,17 @@ public class MarketingMethodChannelHandler {
     
     private void handleEnableMarketing(MethodCall call, MethodChannel.Result result) {
         String tenantId = call.argument("tenant_id");
+        String userId = call.argument("user_id");
         Integer dailyLimit = call.argument("daily_limit");
         String accessToken = call.argument("access_token");
         
-        if (tenantId == null) {
-            result.error("INVALID_ARGS", "tenant_id is required", null);
+        if (tenantId == null || userId == null) {
+            result.error("INVALID_ARGS", "tenant_id and user_id are required", null);
             return;
         }
         
         marketingService.enableMarketing(tenantId, 
+                                        userId,
                                         dailyLimit != null ? dailyLimit : 100,
                                         accessToken);
         result.success(true);

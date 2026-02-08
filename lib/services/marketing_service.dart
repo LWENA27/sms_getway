@@ -11,13 +11,15 @@ class MarketingService {
   /// Enable marketing automation
   ///
   /// [tenantId] - Tenant UUID
+  /// [userId] - User UUID (from auth.users)
   /// [dailyLimit] - Max SMS per day (default: 100)
   /// [accessToken] - User's Supabase JWT token for RLS
-  Future<bool> enableMarketing(String tenantId,
+  Future<bool> enableMarketing(String tenantId, String userId,
       {int dailyLimit = 100, String? accessToken}) async {
     try {
       final result = await _channel.invokeMethod('enableMarketing', {
         'tenant_id': tenantId,
+        'user_id': userId,
         'daily_limit': dailyLimit,
         'access_token': accessToken,
       });
