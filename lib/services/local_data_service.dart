@@ -80,7 +80,8 @@ class LocalDataService {
             .select()
             .eq('tenant_id', tenantId)
             .eq('user_id', Supabase.instance.client.auth.currentUser!.id)
-            .order('name');
+            .order('name')
+            .limit(100000); // Override default 1000 limit
 
         final remoteContacts = response as List;
         debugPrint('✅ Fetched ${remoteContacts.length} contacts from Supabase');
@@ -298,7 +299,8 @@ class LocalDataService {
             .from('groups')
             .select('*, group_members(count)')
             .eq('tenant_id', tenantId)
-            .order('name');
+            .order('name')
+            .limit(100000); // Override default 1000 limit
 
         final remoteGroups = response as List;
         debugPrint('✅ Fetched ${remoteGroups.length} groups from Supabase');
@@ -525,7 +527,7 @@ class LocalDataService {
         }
 
         final response =
-            await query.order('created_at', ascending: false).limit(500);
+            await query.order('created_at', ascending: false).limit(10000); // Allow more logs
         final remoteLogs = response as List;
 
         debugPrint('✅ Fetched ${remoteLogs.length} SMS logs from Supabase');
