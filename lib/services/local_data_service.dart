@@ -526,8 +526,9 @@ class LocalDataService {
           debugPrint('🔍 Filtering by status: $statusFilter');
         }
 
-        final response =
-            await query.order('created_at', ascending: false).limit(10000); // Allow more logs
+        final response = await query
+            .order('created_at', ascending: false)
+            .limit(10000); // Allow more logs
         final remoteLogs = response as List;
 
         debugPrint('✅ Fetched ${remoteLogs.length} SMS logs from Supabase');

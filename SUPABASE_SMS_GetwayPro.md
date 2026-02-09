@@ -117,13 +117,25 @@ SMS Gateway specific tables - **all have `tenant_id` for isolation**.
 | Table | Description |
 |-------|-------------|
 | `users` | User profiles in SMS Gateway |
+| `tenants` | Tenant workspaces |
+| `tenant_members` | Tenant membership and roles |
 | `contacts` | Phone contacts |
 | `groups` | Contact groups |
 | `group_members` | Group membership (many-to-many) |
 | `sms_logs` | SMS sending history |
+| `sms_requests` | API-triggered SMS queue |
 | `api_keys` | API authentication keys |
+| `api_rate_limits` | API usage counters |
 | `audit_logs` | Activity tracking |
 | `settings` | User preferences |
+| `user_settings` | User settings backup |
+| `tenant_settings` | Tenant settings backup |
+| `settings_sync_log` | Settings sync audit trail |
+| `marketing_campaigns` | Marketing campaign definitions |
+| `marketing_campaign_contacts` | Campaign recipients |
+| `marketing_settings` | Tenant marketing limits |
+| `marketing_frequency_events` | 30-day frequency tracker |
+| `marketing_optouts` | Opt-out blacklist |
 
 ---
 
@@ -151,7 +163,8 @@ CREATE TABLE sms_gateway.contacts (
   tenant_id UUID NOT NULL,
   name VARCHAR(255) NOT NULL,
   phone_number VARCHAR(20) NOT NULL,
-  email VARCHAR(255),
+  first_name VARCHAR(255),
+  last_name VARCHAR(255),
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -177,8 +190,7 @@ CREATE TABLE sms_gateway.group_members (
   group_id UUID NOT NULL REFERENCES sms_gateway.groups(id),
   contact_id UUID NOT NULL REFERENCES sms_gateway.contacts(id),
   tenant_id UUID NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW(),
-  UNIQUE(group_id, contact_id)
+  added_at TIMESTAMP DEFAULT NOW()
 );
 ```
 
@@ -192,8 +204,13 @@ CREATE TABLE sms_gateway.sms_logs (
   phone_number VARCHAR(20) NOT NULL,
   message TEXT NOT NULL,
   status VARCHAR(50) DEFAULT 'pending',
-  sent_at TIMESTAMP,
-  created_at TIMESTAMP DEFAULT NOW()
+  sent_at TIMESTAMP WITH TIME ZONE,
+  error_message TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  campaign_id UUID REFERENCES sms_gateway.marketing_campaigns(id),
+  channel VARCHAR(50) DEFAULT 'manual',
+  device_id VARCHAR(255)
 );
 ```
 
@@ -203,11 +220,162 @@ CREATE TABLE sms_gateway.api_keys (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id),
   tenant_id UUID NOT NULL,
-  key VARCHAR(255) UNIQUE NOT NULL,
-  name VARCHAR(255),
-  is_active BOOLEAN DEFAULT true,
-  last_used_at TIMESTAMP,
-  created_at TIMESTAMP DEFAULT NOW()
+  name VARCHAR(255) NOT NULL,
+  key_hash VARCHAR(255) UNIQUE NOT NULL,
+  last_used TIMESTAMP WITH TIME ZONE,
+  active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### `sms_gateway.api_rate_limits`
+```sql
+CREATE TABLE sms_gateway.api_rate_limits (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  api_key_id UUID NOT NULL REFERENCES sms_gateway.api_keys(id),
+  window_start TIMESTAMP WITH TIME ZONE NOT NULL,
+  request_count INTEGER DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### `sms_gateway.sms_requests`
+```sql
+CREATE TABLE sms_gateway.sms_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL,
+  api_key_id UUID REFERENCES sms_gateway.api_keys(id),
+  phone_number VARCHAR(20) NOT NULL,
+  message TEXT NOT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'pending',
+  priority INTEGER DEFAULT 0,
+  scheduled_at TIMESTAMP WITH TIME ZONE,
+  processed_at TIMESTAMP WITH TIME ZONE,
+  error_message TEXT,
+  external_id VARCHAR(255),
+  metadata JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  source VARCHAR(50) DEFAULT 'api',
+  created_by UUID
+);
+```
+
+### `sms_gateway.tenants`
+```sql
+CREATE TABLE sms_gateway.tenants (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
+  status TEXT DEFAULT 'active',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  client_id UUID
+);
+```
+
+### `sms_gateway.tenant_members`
+```sql
+CREATE TABLE sms_gateway.tenant_members (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES sms_gateway.tenants(id),
+  user_id UUID NOT NULL REFERENCES auth.users(id),
+  role TEXT NOT NULL DEFAULT 'member',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+```
+
+### `sms_gateway.settings`
+```sql
+CREATE TABLE sms_gateway.settings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES sms_gateway.users(id),
+  setting_key VARCHAR(255) NOT NULL,
+  setting_value JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  tenant_id UUID NOT NULL
+);
+```
+
+### `sms_gateway.marketing_campaigns`
+```sql
+CREATE TABLE sms_gateway.marketing_campaigns (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES sms_gateway.tenants(id),
+  name VARCHAR(255) NOT NULL,
+  message_template TEXT NOT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'draft',
+  daily_sent_count INTEGER NOT NULL DEFAULT 0,
+  total_sent_count INTEGER NOT NULL DEFAULT 0,
+  total_contact_count INTEGER NOT NULL DEFAULT 0,
+  created_by UUID REFERENCES sms_gateway.users(id),
+  created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now(),
+  activated_at TIMESTAMP WITHOUT TIME ZONE,
+  paused_at TIMESTAMP WITHOUT TIME ZONE,
+  completed_at TIMESTAMP WITHOUT TIME ZONE,
+  updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now()
+);
+```
+
+### `sms_gateway.marketing_campaign_contacts`
+```sql
+CREATE TABLE sms_gateway.marketing_campaign_contacts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  campaign_id UUID NOT NULL REFERENCES sms_gateway.marketing_campaigns(id),
+  contact_id UUID REFERENCES sms_gateway.contacts(id),
+  phone_number VARCHAR(20) NOT NULL,
+  first_name VARCHAR(255),
+  last_name VARCHAR(255),
+  status VARCHAR(50) NOT NULL DEFAULT 'pending',
+  sent_at TIMESTAMP WITHOUT TIME ZONE,
+  failure_reason TEXT,
+  created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now(),
+  updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now()
+);
+```
+
+### `sms_gateway.marketing_settings`
+```sql
+CREATE TABLE sms_gateway.marketing_settings (
+  tenant_id UUID PRIMARY KEY REFERENCES sms_gateway.tenants(id),
+  enabled BOOLEAN NOT NULL DEFAULT false,
+  daily_limit INTEGER NOT NULL DEFAULT 100,
+  per_number_limit INTEGER NOT NULL DEFAULT 2,
+  per_number_days INTEGER NOT NULL DEFAULT 30,
+  send_interval_seconds INTEGER NOT NULL DEFAULT 45,
+  daily_sent_count INTEGER NOT NULL DEFAULT 0,
+  last_reset_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now(),
+  updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now()
+);
+```
+
+### `sms_gateway.marketing_frequency_events`
+```sql
+CREATE TABLE sms_gateway.marketing_frequency_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES sms_gateway.tenants(id),
+  phone_number VARCHAR(20) NOT NULL,
+  campaign_id UUID REFERENCES sms_gateway.marketing_campaigns(id),
+  sent_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now(),
+  message_preview TEXT,
+  device_id VARCHAR(255)
+);
+```
+
+### `sms_gateway.marketing_optouts`
+```sql
+CREATE TABLE sms_gateway.marketing_optouts (
+  phone_number VARCHAR(20) NOT NULL,
+  tenant_id UUID NOT NULL REFERENCES sms_gateway.tenants(id),
+  opted_out_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now(),
+  method VARCHAR(50) NOT NULL DEFAULT 'manual',
+  notes TEXT,
+  added_by UUID REFERENCES sms_gateway.users(id),
+  PRIMARY KEY (phone_number, tenant_id)
 );
 ```
 

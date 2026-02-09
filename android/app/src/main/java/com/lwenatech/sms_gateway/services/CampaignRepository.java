@@ -104,7 +104,7 @@ public class CampaignRepository {
                 
                 String contactFilter = "campaign_id=in.(" + campaignIdsStr + ")" +
                                       "&status=eq.pending" +
-                                      "&select=id,campaign_id,phone_number,first_name,last_name" +
+                                      "&select=id,campaign_id,contact_id,phone_number,first_name,last_name" +
                                       "&order=created_at" +
                                       "&limit=" + fetchSize +
                                       "&offset=" + offset;
@@ -127,6 +127,11 @@ public class CampaignRepository {
                         Map<String, String> contactMap = new HashMap<>();
                         contactMap.put("id", contact.optString("id"));
                         contactMap.put("campaign_id", campaignId);
+                        String contactId = contact.optString("contact_id", null);
+                        if (contactId != null && contactId.isEmpty()) {
+                            contactId = null;
+                        }
+                        contactMap.put("contact_id", contactId);
                         contactMap.put("phone_number", contact.optString("phone_number"));
                         contactMap.put("first_name", contact.optString("first_name"));
                         contactMap.put("last_name", contact.optString("last_name"));

@@ -268,26 +268,25 @@ class _CampaignCreateScreenState extends State<CampaignCreateScreen> {
         final contactsToAdd = _availableContacts
             .where((c) => _selectedContactIds.contains(c.id))
             .where((c) {
-              // Clean and validate phone number to match DB constraint: ^\+?[1-9]\d{1,14}$
-              final phone = c.phoneNumber.trim();
-              // Remove spaces, dashes, parentheses
-              final cleanPhone = phone.replaceAll(RegExp(r'[\s\-\(\)]'), '');
-              // Match database constraint: optional +, starts with 1-9, followed by 1-14 digits
-              return RegExp(r'^\+?[1-9]\d{1,14}$').hasMatch(cleanPhone);
-            })
-            .map((c) {
-              // Clean phone number for database
-              final cleanPhone = c.phoneNumber.trim().replaceAll(RegExp(r'[\s\-\(\)]'), '');
-              return {
-                'campaign_id': campaignId,
-                'contact_id': c.id,
-                'phone_number': cleanPhone,
-                'first_name': c.firstName,
-                'last_name': c.lastName,
-                'status': 'pending',
-              };
-            })
-            .toList();
+          // Clean and validate phone number to match DB constraint: ^\+?[1-9]\d{1,14}$
+          final phone = c.phoneNumber.trim();
+          // Remove spaces, dashes, parentheses
+          final cleanPhone = phone.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+          // Match database constraint: optional +, starts with 1-9, followed by 1-14 digits
+          return RegExp(r'^\+?[1-9]\d{1,14}$').hasMatch(cleanPhone);
+        }).map((c) {
+          // Clean phone number for database
+          final cleanPhone =
+              c.phoneNumber.trim().replaceAll(RegExp(r'[\s\-\(\)]'), '');
+          return {
+            'campaign_id': campaignId,
+            'contact_id': c.id,
+            'phone_number': cleanPhone,
+            'first_name': c.firstName,
+            'last_name': c.lastName,
+            'status': 'pending',
+          };
+        }).toList();
 
         final skippedCount = _selectedContactIds.length - contactsToAdd.length;
 

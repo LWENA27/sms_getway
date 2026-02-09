@@ -65,6 +65,7 @@ public class SendMarketingSmsWorker extends Worker {
             Data inputData = getInputData();
             String tenantId = inputData.getString("tenant_id");
             String campaignId = inputData.getString("campaign_id");
+            String campaignContactId = inputData.getString("campaign_contact_id");
             String contactId = inputData.getString("contact_id");
             String phoneNumber = inputData.getString("phone_number");
             String message = inputData.getString("message");
@@ -74,7 +75,7 @@ public class SendMarketingSmsWorker extends Worker {
             Log.i(TAG, "Processing SMS for: " + phoneNumber);
             
             // Validate input
-            if (tenantId == null || campaignId == null || contactId == null || phoneNumber == null || message == null) {
+            if (tenantId == null || campaignId == null || campaignContactId == null || phoneNumber == null || message == null) {
                 Log.e(TAG, "Missing required input data");
                 return Result.failure();
             }
@@ -115,6 +116,7 @@ public class SendMarketingSmsWorker extends Worker {
             // Step 3: Start Foreground Service to send SMS
             // Note: Foreground Service has permission to send SMS
             Intent serviceIntent = new Intent(context, MarketingSmsService.class);
+            serviceIntent.putExtra(MarketingSmsService.EXTRA_CAMPAIGN_CONTACT_ID, campaignContactId);
             serviceIntent.putExtra(MarketingSmsService.EXTRA_CONTACT_ID, contactId);
             serviceIntent.putExtra(MarketingSmsService.EXTRA_CAMPAIGN_ID, campaignId);
             serviceIntent.putExtra(MarketingSmsService.EXTRA_PHONE_NUMBER, phoneNumber);

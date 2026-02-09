@@ -36,6 +36,7 @@ public class MarketingSmsService extends Service {
 
     // Intent extras
     public static final String EXTRA_CONTACT_ID = "contact_id";
+    public static final String EXTRA_CAMPAIGN_CONTACT_ID = "campaign_contact_id";
     public static final String EXTRA_CAMPAIGN_ID = "campaign_id";
     public static final String EXTRA_PHONE_NUMBER = "phone_number";
     public static final String EXTRA_MESSAGE = "message";
@@ -64,6 +65,7 @@ public class MarketingSmsService extends Service {
             return START_NOT_STICKY;
         }
 
+        String campaignContactId = intent.getStringExtra(EXTRA_CAMPAIGN_CONTACT_ID);
         String contactId = intent.getStringExtra(EXTRA_CONTACT_ID);
         String campaignId = intent.getStringExtra(EXTRA_CAMPAIGN_ID);
         String phoneNumber = intent.getStringExtra(EXTRA_PHONE_NUMBER);
@@ -83,13 +85,13 @@ public class MarketingSmsService extends Service {
             updateNotification("Sent " + smsSentCount + " marketing SMS");
             
             // Log success to database
-            logMarketingEvent(contactId, campaignId, phoneNumber, message, tenantId, "sent", null);
+            logMarketingEvent(campaignId, contactId, phoneNumber, message, tenantId, "sent", null);
             
             // Update contact status to 'sent'
-            updateContactStatus(contactId, "sent");
+            updateContactStatus(campaignContactId, "sent");
         } else {
             // Log failure to database
-            logMarketingEvent(contactId, campaignId, phoneNumber, message, tenantId, "failed", "SMS sending failed");
+            logMarketingEvent(campaignId, contactId, phoneNumber, message, tenantId, "failed", "SMS sending failed");
         }
 
         // Stop service after processing (worker will start new instance for next SMS)
@@ -196,7 +198,7 @@ public class MarketingSmsService extends Service {
     /**
      * Log marketing event to database
      */
-    private void logMarketingEvent(String contactId, String campaignId, String phoneNumber,
+    private void logMarketingEvent(String campaignId, String contactId, String phoneNumber,
                                    String message, String tenantId, String status, String errorMessage) {
         // Run on background thread to avoid NetworkOnMainThreadException
         executorService.execute(() -> {
@@ -216,7 +218,9 @@ public class MarketingSmsService extends Service {
             smsLog.put("id", java.util.UUID.randomUUID().toString());
             smsLog.put("tenant_id", tenantId);
             smsLog.put("user_id", userId != null ? userId : tenantId); // Use actual user_id if available, fallback to tenantId
-            smsLog.put("contact_id", contactId);
+            if (contactId != null && !contactId.isEmpty()) {
+                smsLog.put("contact_id", contactId);
+            }
             smsLog.put("campaign_id", campaignId);
             smsLog.put("phone_number", phoneNumber);
             smsLog.put("message", message != null ? message : "Marketing Campaign SMS");
