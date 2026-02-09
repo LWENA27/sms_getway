@@ -71,9 +71,19 @@ class _MarketingSettingsScreenState extends State<MarketingSettingsScreen> {
   Future<void> _toggleMarketing(bool value) async {
     if (_tenantId == null) return;
 
+    final bool isAndroid = !kIsWeb && Platform.isAndroid;
+    if (value && !isAndroid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Marketing automation runs only on Android devices'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     // Check SMS permission on Android when enabling
     if (value) {
-      final bool isAndroid = !kIsWeb && Platform.isAndroid;
       if (isAndroid) {
         final status = await Permission.sms.request();
         if (!status.isGranted) {
@@ -204,6 +214,17 @@ class _MarketingSettingsScreenState extends State<MarketingSettingsScreen> {
   }
 
   Future<void> _forceCheck() async {
+    final bool isAndroid = !kIsWeb && Platform.isAndroid;
+    if (!isAndroid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Campaign checks run only on Android devices'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     // Check if marketing is enabled first
     if (!_isEnabled) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -253,6 +274,8 @@ class _MarketingSettingsScreenState extends State<MarketingSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isAndroid = !kIsWeb && Platform.isAndroid;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Marketing Automation'),
@@ -289,7 +312,7 @@ class _MarketingSettingsScreenState extends State<MarketingSettingsScreen> {
                               ),
                               Switch(
                                 value: _isEnabled,
-                                onChanged: _toggleMarketing,
+                                onChanged: isAndroid ? _toggleMarketing : null,
                               ),
                             ],
                           ),
@@ -297,9 +320,15 @@ class _MarketingSettingsScreenState extends State<MarketingSettingsScreen> {
                           Text(
                             _isEnabled
                                 ? 'Background workers are running'
-                                : 'Automation is disabled',
+                                : (isAndroid
+                                    ? 'Automation is disabled'
+                                    : 'Android required for automation'),
                             style: TextStyle(
-                              color: _isEnabled ? Colors.green : Colors.grey,
+                              color: _isEnabled
+                                  ? Colors.green
+                                  : (isAndroid
+                                      ? Colors.grey
+                                      : Colors.orange.shade700),
                             ),
                           ),
                         ],
@@ -428,18 +457,33 @@ class _MarketingSettingsScreenState extends State<MarketingSettingsScreen> {
                           ),
                           const SizedBox(height: 12),
                           ElevatedButton.icon(
-                            onPressed: _isEnabled ? _forceCheck : null,
+                            onPressed:
+                                (_isEnabled && isAndroid) ? _forceCheck : null,
                             icon: const Icon(Icons.play_arrow),
                             label: Text(
                               _isEnabled
-                                  ? 'Check Campaigns Now'
+                                  ? (isAndroid
+                                      ? 'Check Campaigns Now'
+                                      : 'Android required')
                                   : 'Enable automation first',
                             ),
                             style: ElevatedButton.styleFrom(
                               minimumSize: const Size(double.infinity, 48),
-                              backgroundColor: _isEnabled ? null : Colors.grey,
+                              backgroundColor:
+                                  (_isEnabled && isAndroid) ? null : Colors.grey,
                             ),
                           ),
+                          if (!isAndroid)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 8),
+                              child: Text(
+                                'Automation runs only on Android devices.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.orange,
+                                ),
+                              ),
+                            ),
                           if (!_isEnabled)
                             const Padding(
                               padding: EdgeInsets.only(top: 8),

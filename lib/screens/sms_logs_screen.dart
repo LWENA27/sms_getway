@@ -185,6 +185,15 @@ class _SmsLogsScreenState extends State<SmsLogsScreen> {
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
+                                    if (log.channel != null) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Channel: ${log.channel}',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall,
+                                      ),
+                                    ],
                                     const SizedBox(height: 4),
                                     Text(
                                       _formatDateTime(log.createdAt),
@@ -237,6 +246,8 @@ class _SmsLogsScreenState extends State<SmsLogsScreen> {
               const SizedBox(height: 12),
               _buildDetailRow('Status:', log.status),
               const SizedBox(height: 12),
+                _buildDetailRow('Channel:', log.channel ?? 'manual'),
+                const SizedBox(height: 12),
               _buildDetailRow(
                   'Sent At:', _formatDateTime(log.sentAt ?? log.createdAt)),
               const SizedBox(height: 12),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -577,6 +578,10 @@ class _HomePageState extends State<HomePage> {
 
         // Auto-start API SMS Queue if configured
         _autoStartApiQueue();
+
+        if (kIsWeb) {
+          await _showWebStorageNoticeOnce();
+        }
       } else {
         if (mounted) {
           setState(() {
@@ -592,6 +597,23 @@ class _HomePageState extends State<HomePage> {
         });
       }
     }
+  }
+
+  Future<void> _showWebStorageNoticeOnce() async {
+    final prefs = await SharedPreferences.getInstance();
+    final shown = prefs.getBool('web_storage_notice_shown') ?? false;
+    if (shown || !mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Web uses cloud storage only. Offline local database is not available.',
+        ),
+        duration: Duration(seconds: 4),
+      ),
+    );
+
+    await prefs.setBool('web_storage_notice_shown', true);
   }
 
   /// ✅ NEW: Background sync - updates UI when complete

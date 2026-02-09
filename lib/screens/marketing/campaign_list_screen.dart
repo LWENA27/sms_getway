@@ -26,6 +26,17 @@ class _CampaignListScreenState extends State<CampaignListScreen> {
   String? _error;
   bool _marketingEnabled = false;
   Map<String, dynamic>? _marketingSettings;
+  bool _analyticsLoading = false;
+  String? _analyticsError;
+  Map<String, int> _analyticsSummary = {
+    'totalCampaigns': 0,
+    'activeCampaigns': 0,
+    'totalContacts': 0,
+    'sent': 0,
+    'failed': 0,
+    'skipped': 0,
+    'pending': 0,
+  };
 
   @override
   void initState() {
@@ -74,14 +85,102 @@ class _CampaignListScreenState extends State<CampaignListScreen> {
 
       final campaignsWithStats = await _loadCampaignStats(campaigns);
 
+      await _loadAnalyticsSummary(campaignsWithStats);
+
+      if (!mounted) return;
       setState(() {
         _campaigns = campaignsWithStats;
         _loading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _loading = false;
+      });
+    }
+  }
+
+  Future<void> _loadAnalyticsSummary(
+      List<MarketingCampaign> campaigns) async {
+    if (!mounted) return;
+    setState(() {
+      _analyticsLoading = true;
+      _analyticsError = null;
+    });
+
+    final campaignIds = campaigns.map((c) => c.id).toList();
+    final totalCampaigns = campaigns.length;
+    final activeCampaigns = campaigns.where((c) => c.isActive).length;
+    final totalContacts = campaigns.fold(0, (sum, c) => sum + c.totalContactCount);
+    final sent = campaigns.fold(0, (sum, c) => sum + c.totalSentCount);
+
+    if (campaignIds.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _analyticsSummary = {
+          'totalCampaigns': totalCampaigns,
+          'activeCampaigns': activeCampaigns,
+          'totalContacts': totalContacts,
+          'sent': sent,
+          'failed': 0,
+          'skipped': 0,
+          'pending': (totalContacts - sent).clamp(0, totalContacts) as int,
+        };
+        _analyticsLoading = false;
+      });
+      return;
+    }
+
+    try {
+      final failedResponse = await _supabase
+          .schema('sms_gateway')
+          .from('marketing_campaign_contacts')
+          .select('id')
+          .inFilter('campaign_id', campaignIds)
+          .eq('status', 'failed')
+          .count(CountOption.exact);
+
+      final skippedResponse = await _supabase
+          .schema('sms_gateway')
+          .from('marketing_campaign_contacts')
+          .select('id')
+          .inFilter('campaign_id', campaignIds)
+          .eq('status', 'skipped')
+          .count(CountOption.exact);
+
+      final failed = failedResponse.count ?? 0;
+      final skipped = skippedResponse.count ?? 0;
+        final pending =
+          (totalContacts - sent - failed - skipped).clamp(0, totalContacts) as int;
+
+      if (!mounted) return;
+      setState(() {
+        _analyticsSummary = {
+          'totalCampaigns': totalCampaigns,
+          'activeCampaigns': activeCampaigns,
+          'totalContacts': totalContacts,
+          'sent': sent,
+          'failed': failed,
+          'skipped': skipped,
+          'pending': pending,
+        };
+        _analyticsLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _analyticsError = e.toString();
+        _analyticsLoading = false;
+        _analyticsSummary = {
+          'totalCampaigns': totalCampaigns,
+          'activeCampaigns': activeCampaigns,
+          'totalContacts': totalContacts,
+          'sent': sent,
+          'failed': 0,
+          'skipped': 0,
+          'pending': (totalContacts - sent).clamp(0, totalContacts) as int,
+        };
       });
     }
   }
@@ -136,9 +235,21 @@ class _CampaignListScreenState extends State<CampaignListScreen> {
       return; // Can't toggle completed or cancelled
     }
 
+    final bool isAndroid = !kIsWeb && Platform.isAndroid;
+    if (newStatus == 'active' && !isAndroid) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Campaign activation runs only on Android devices'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
     // If activating campaign, check SMS permission on Android
     if (newStatus == 'active') {
-      final bool isAndroid = !kIsWeb && Platform.isAndroid;
       if (isAndroid) {
         final status = await Permission.sms.request();
         if (!status.isGranted) {
@@ -326,14 +437,19 @@ class _CampaignListScreenState extends State<CampaignListScreen> {
       },
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: _campaigns.length + 1, // +1 for status banner
+        itemCount: _campaigns.length + 2, // +2 for status + analytics
         itemBuilder: (context, index) {
           // Status banner at top
           if (index == 0) {
             return _buildStatusBanner();
           }
 
-          final campaign = _campaigns[index - 1];
+          // Analytics summary
+          if (index == 1) {
+            return _buildAnalyticsSummary();
+          }
+
+          final campaign = _campaigns[index - 2];
           return _CampaignCard(
             campaign: campaign,
             onToggle: () => _toggleCampaignStatus(campaign),
@@ -448,6 +564,140 @@ class _CampaignListScreenState extends State<CampaignListScreen> {
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnalyticsSummary() {
+    if (_analyticsLoading) {
+      return const Padding(
+        padding: EdgeInsets.only(bottom: 16),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final summary = _analyticsSummary;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.analytics, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Analytics Summary',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              if (_analyticsError != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Some stats may be unavailable',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.orange.shade700,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _SummaryStat(
+                    label: 'Campaigns',
+                    value: summary['totalCampaigns'] ?? 0,
+                    color: Colors.blue,
+                  ),
+                  _SummaryStat(
+                    label: 'Active',
+                    value: summary['activeCampaigns'] ?? 0,
+                    color: Colors.green,
+                  ),
+                  _SummaryStat(
+                    label: 'Sent',
+                    value: summary['sent'] ?? 0,
+                    color: Colors.green.shade700,
+                  ),
+                  _SummaryStat(
+                    label: 'Failed',
+                    value: summary['failed'] ?? 0,
+                    color: Colors.red,
+                  ),
+                  _SummaryStat(
+                    label: 'Skipped',
+                    value: summary['skipped'] ?? 0,
+                    color: Colors.orange,
+                  ),
+                  _SummaryStat(
+                    label: 'Pending',
+                    value: summary['pending'] ?? 0,
+                    color: Colors.blueGrey,
+                  ),
+                  _SummaryStat(
+                    label: 'Contacts',
+                    value: summary['totalContacts'] ?? 0,
+                    color: Colors.grey,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SummaryStat extends StatelessWidget {
+  final String label;
+  final int value;
+  final Color color;
+
+  const _SummaryStat({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            value.toString(),
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
             ),
           ),
         ],

@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme.dart';
 import '../core/tenant_service.dart';
 import '../services/local_data_service.dart';
-import '../services/web_sms_service.dart';
 import '../api/native_sms_service.dart';
 import '../contacts/contact_model.dart';
 import '../groups/group_model.dart';
@@ -94,6 +93,16 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
       return;
     }
 
+    final bool isAndroid = !kIsWeb && Platform.isAndroid;
+    if (!isAndroid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('SMS sending is only available on Android devices'),
+        ),
+      );
+      return;
+    }
+
     // Load selected SMS channel from SharedPreferences
     final prefs = await SharedPreferences.getInstance();
     final selectedChannel = prefs.getString('sms_channel') ?? 'thisPhone';
@@ -105,15 +114,6 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
       final tenantId = TenantService().tenantId;
       if (tenantId == null) {
         throw 'No tenant selected';
-      }
-
-      // Platform detection: Check if we can send SMS natively
-      final bool isAndroid = !kIsWeb && Platform.isAndroid;
-
-      // If not Android, queue SMS for processing by mobile app
-      if (!isAndroid) {
-        await _queueSmsForMobile(recipients, messageController.text);
-        return; // Exit early
       }
 
       // Android platform - Request SMS permission for "This Phone" channel
@@ -151,7 +151,7 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
           recipients: recipients,
           message: messageController.text,
           tenantId: tenantId,
-          channel: 'quickSMS',
+          channel: 'bulk',
           onSuccess: (count) => successCount = count,
           onFailure: (count) => failureCount = count,
         );
@@ -266,7 +266,7 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
             message: message,
             status: wasSent ? 'sent' : 'failed',
             contactId: recipient.id,
-            channel: 'thisPhone',
+            channel: 'bulk',
           );
 
           debugPrint('📊 SMS logged for ${recipient.phoneNumber}');
@@ -283,115 +283,6 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
     onFailure(failureCount);
   }
 
-  /// Queue SMS for mobile app processing (Web/iOS/non-Android platforms)
-  Future<void> _queueSmsForMobile(
-      List<Contact> recipients, String message) async {
-    try {
-      final phoneNumbers = recipients.map((r) => r.phoneNumber).toList();
-
-      debugPrint(
-          '🌐 [Platform: ${kIsWeb ? "Web" : Platform.operatingSystem}] Queuing ${phoneNumbers.length} SMS');
-
-      // Queue SMS requests using WebSmsService
-      await WebSmsService().queueBulkSms(
-        phoneNumbers: phoneNumbers,
-        message: message,
-        priority: 0,
-        metadata: {
-          'source': 'bulk_sms_screen',
-          'platform': kIsWeb ? 'web' : Platform.operatingSystem,
-        },
-      );
-
-      debugPrint('✅ SMS queued successfully');
-
-      if (mounted) {
-        setState(() => isLoading = false);
-
-        // Show popup: SMS pending, login to mobile to send
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            title: Row(
-              children: [
-                Icon(Icons.schedule_send,
-                    color: Theme.of(context).primaryColor),
-                const SizedBox(width: 12),
-                const Text('SMS Pending'),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '📱 ${phoneNumbers.length} SMS queued for sending',
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w500),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange.shade200),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.info_outline,
-                              size: 20, color: Colors.orange.shade700),
-                          const SizedBox(width: 8),
-                          const Expanded(
-                            child: Text(
-                              'To send these SMS:',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      const Text('✅ Login to mobile app (Android)'),
-                      const Text('✅ Enable queue processing in Settings'),
-                      const Text('✅ Keep app running in background'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  messageController.clear();
-                  setState(() {
-                    selectedContacts = [];
-                    selectedGroupId = null;
-                  });
-                },
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint('❌ Error queuing SMS: $e');
-      if (mounted) {
-        setState(() => isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error queuing SMS: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
 
   Future<void> _logSmsToDatabase({
     required List<Contact> recipients,
@@ -428,6 +319,8 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool canSendSms = !kIsWeb && Platform.isAndroid;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Send SMS'),
@@ -587,7 +480,8 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton.icon(
-                      onPressed: isLoading ? null : _sendSms,
+                      onPressed:
+                          (isLoading || !canSendSms) ? null : _sendSms,
                       icon: isLoading
                           ? const SizedBox(
                               width: 20,
@@ -595,9 +489,22 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.send),
-                      label: Text(isLoading ? 'Sending...' : 'Send SMS'),
+                      label: Text(
+                        isLoading
+                            ? 'Sending...'
+                            : (canSendSms ? 'Send SMS' : 'Android Only'),
+                      ),
                     ),
                   ),
+                  if (!canSendSms) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'SMS sending is disabled on web and non-Android platforms.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.orange.shade700,
+                          ),
+                    ),
+                  ],
                 ],
               ),
             ),

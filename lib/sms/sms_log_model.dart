@@ -9,6 +9,7 @@ class SmsLog {
   final String status; // sent, failed, delivered, pending
   final DateTime? sentAt;
   final String? errorMessage;
+  final String? channel; // thisPhone, quickSMS, api, manual
   final DateTime createdAt;
 
   SmsLog({
@@ -21,6 +22,7 @@ class SmsLog {
     required this.status,
     this.sentAt,
     this.errorMessage,
+    this.channel,
     required this.createdAt,
   });
 
@@ -38,6 +40,7 @@ class SmsLog {
           ? DateTime.parse(json['sent_at'] as String)
           : null,
       errorMessage: json['error_message'] as String?,
+      channel: json['channel'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
@@ -53,6 +56,7 @@ class SmsLog {
         'status': status,
         'sent_at': sentAt?.toIso8601String(),
         'error_message': errorMessage,
+        'channel': channel,
         'created_at': createdAt.toIso8601String(),
       };
 
@@ -67,6 +71,7 @@ class SmsLog {
     String? status,
     DateTime? sentAt,
     String? errorMessage,
+    String? channel,
     DateTime? createdAt,
   }) {
     return SmsLog(
@@ -79,6 +84,7 @@ class SmsLog {
       status: status ?? this.status,
       sentAt: sentAt ?? this.sentAt,
       errorMessage: errorMessage ?? this.errorMessage,
+      channel: channel ?? this.channel,
       createdAt: createdAt ?? this.createdAt,
     );
   }

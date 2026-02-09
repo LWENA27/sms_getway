@@ -554,6 +554,7 @@ class LocalDataService {
                       ? DateTime.parse(json['sent_at'])
                       : null,
                   errorMessage: json['error_message'],
+                channel: json['channel'],
                   createdAt: DateTime.parse(json['created_at']),
                 ))
             .toList();
@@ -579,6 +580,7 @@ class LocalDataService {
   }) async {
     final tenantId = TenantService().tenantId;
     final userId = _getAuthUserId();
+    final normalizedChannel = _normalizeChannel(channel);
 
     if (tenantId == null || userId == null) {
       throw Exception('No tenant selected');
@@ -601,7 +603,9 @@ class LocalDataService {
           'status': status,
           'sent_at': status == 'sent' ? now.toIso8601String() : null,
           'error_message': errorMessage,
+          'channel': normalizedChannel,
           'created_at': now.toIso8601String(),
+          'updated_at': now.toIso8601String(),
         });
       } catch (e) {
         debugPrint('❌ Error logging SMS to Supabase: $e');
@@ -618,7 +622,7 @@ class LocalDataService {
         status: Value(status),
         sentAt: Value(status == 'sent' ? now : null),
         errorMessage: Value(errorMessage),
-        channel: Value(channel),
+        channel: Value(normalizedChannel),
         createdAt: Value(now),
         syncStatus: const Value('pending_create'),
       ));
@@ -639,6 +643,7 @@ class LocalDataService {
       status: status,
       sentAt: status == 'sent' ? now : null,
       errorMessage: errorMessage,
+      channel: normalizedChannel,
       createdAt: now,
     );
   }
@@ -795,8 +800,24 @@ class LocalDataService {
       status: ll.status,
       sentAt: ll.sentAt,
       errorMessage: ll.errorMessage,
+      channel: ll.channel,
       createdAt: ll.createdAt,
     );
+  }
+
+  String _normalizeChannel(String? channel) {
+    switch (channel) {
+      case 'marketing':
+      case 'api':
+      case 'bulk':
+      case 'manual':
+        return channel!;
+      case 'thisPhone':
+      case 'quickSMS':
+        return 'bulk';
+      default:
+        return 'manual';
+    }
   }
 
   /// Clear all local data (on logout)

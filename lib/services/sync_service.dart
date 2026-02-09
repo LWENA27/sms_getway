@@ -393,6 +393,10 @@ class SyncService extends ChangeNotifier {
     for (final log in pendingLogs) {
       try {
         if (log.syncStatus == 'pending_create') {
+          if (log.userId.isEmpty || log.tenantId.isEmpty) {
+            debugPrint('⚠️ Skipping SMS log with missing IDs: ${log.id}');
+            continue;
+          }
           // Use upsert to handle conflicts gracefully
           await _supabase.schema('sms_gateway').from('sms_logs').upsert({
             'id': log.id,
@@ -404,7 +408,9 @@ class SyncService extends ChangeNotifier {
             'status': log.status,
             'sent_at': log.sentAt?.toIso8601String(),
             'error_message': log.errorMessage,
+            'channel': log.channel ?? 'manual',
             'created_at': log.createdAt.toIso8601String(),
+            'updated_at': DateTime.now().toIso8601String(),
           });
           syncedIds.add(log.id);
           count++;
@@ -582,6 +588,7 @@ class SyncService extends ChangeNotifier {
           sentAt: Value(
               json['sent_at'] != null ? DateTime.parse(json['sent_at']) : null),
           errorMessage: Value(json['error_message'] as String?),
+          channel: Value(json['channel'] as String?),
           createdAt: Value(DateTime.parse(json['created_at'])),
           syncStatus: const Value('synced'),
           lastSyncedAt: Value(DateTime.now()),

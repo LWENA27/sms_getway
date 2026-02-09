@@ -134,6 +134,11 @@ class ApiSmsQueueService extends ChangeNotifier {
 
   /// Start the queue processing service
   Future<void> start() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
+      debugPrint('⚠️ API SMS Queue Service is Android-only');
+      return;
+    }
+
     if (_isEnabled) {
       debugPrint('⚠️ API SMS Queue Service already running');
       return;

@@ -80,6 +80,21 @@ A production-ready, enterprise-grade SMS gateway application for bulk messaging 
 
 ---
 
+## 🧭 Platform Rules
+
+**Web and other non-Android platforms MUST:**
+- Create/edit campaigns
+- View analytics
+- Manage contacts
+- Manage settings
+
+**Web platform MUST NOT:**
+- Send SMS
+- Trigger WorkManager/background workers
+- Bypass Android sending limits
+
+---
+
 ## � Download & Install
 
 ### ⚡ Quick Start (5 minutes)

@@ -25,7 +25,7 @@ A **distributed, SIM-based messaging platform** that allows organizations to sen
 ├─────────────────────────────────────────────────────────────────────────┤
 │  PHASE 2: Connected & API-Enabled Gateway           🔄 CORE COMPLETE    │
 │  ├── 2.1 Organization & Authentication              ✅ COMPLETE         │
-│  ├── 2.2 Backend & Sync Layer                       🔄 PARTIAL          │
+│  ├── 2.2 Backend & Sync Layer                       🔄 IN PROGRESS      │
 │  ├── 2.3 API-Triggered SMS                          ✅ COMPLETE         │
 │  ├── 2.4 API Security & Control                     ✅ COMPLETE         │
 │  ├── 2.5 Revenue Enablement (Sender ID)             🔲 PLANNED          │
@@ -76,7 +76,7 @@ User → App UI → Android SmsManager → Phone SIM → Recipient
 
 ## ✅ Phase 2: Connected & API-Enabled Gateway (CORE COMPLETE)
 
-**Note:** Core features complete. Offline-first sync pending.
+**Note:** Core features complete. Offline-first logging active; hardening in progress.
 
 ---
 
@@ -162,20 +162,20 @@ User Login → Auth → Load Tenants (via client_product_access)
 | SMS Logs Table | ✅ | sms_gateway.sms_logs with delivery tracking |
 | Contacts Storage | ✅ | Centralized contact management |
 | Groups Storage | ✅ | Group and membership tracking |
-| Sync Sent/Failed SMS | � | Partial - logs created on send |
+| Sync Sent/Failed SMS | 🔄 | Push from local to cloud with retry |
 | Timestamping | ✅ | Accurate message timing |
-| Message Source Tracking | � | UI tracking implemented |
-| Offline-First Storage | 🔲 | Local cache with sync planned |
+| Message Source Tracking | 🔄 | UI tracking implemented (refine) |
+| Offline-First Storage | ✅ | Local SQLite with sync layer |
 
 **Current Sync Behavior:**
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  ONLINE: SMS sent → Stored directly to Supabase            │
-│  OFFLINE: To be implemented - local queue with sync        │
+│  ONLINE: SMS sent → Local log + push to Supabase           │
+│  OFFLINE: Local log → auto-sync on reconnect               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-📌 Currently requires internet connection. Full offline support planned.
+📌 Offline-first logging is active; remaining work is resiliency and edge cases.
 
 ---
 
@@ -293,7 +293,7 @@ Content-Type: application/json
 
 ---
 
-### � Phase 2.6 – Settings Backup & Cross-Device Sync ✅ COMPLETE
+### 🔸 Phase 2.6 – Settings Backup & Cross-Device Sync ✅ COMPLETE
 
 **Objective:** Allow users to backup their settings to Supabase and restore on different devices.
 
@@ -1065,11 +1065,11 @@ Status Bar:
 |-------|-----------|--------|--------|
 | **1.0** | Local SMS Gateway | Q4 2024 | ✅ Complete |
 | **2.1** | Organization & Auth | Q4 2024 | ✅ Complete |
-| **2.2** | Backend & Sync | Q4 2024 | ✅ Complete |
+| **2.2** | Backend & Sync | Q4 2024 | 🔄 In Progress |
 | **2.3** | API-Triggered SMS | Q4 2025 | ✅ Complete |
 | **2.4** | API Security | Q4 2025 | ✅ Complete |
 | **2.6** | Settings Backup | Q4 2024 | ✅ Complete |
-| **2.7** | Auto Marketing Engine | Q1 2026 | � In Progress |
+| **2.7** | Marketing Automation Engine | Q1 2026 | 🔄 In Progress |
 | **2.5** | Sender ID | Q2 2026 | 🔲 Planned |
 | **3.0** | Enterprise Features | Q3 2026 | 📋 Planned |
 
@@ -1091,9 +1091,9 @@ Status Bar:
 | Rate Limiting | 2.4 | ✅ Complete |
 | **Auto Marketing Campaigns** | **2.7** | **🔄 In Progress** |
 | **Marketing Analytics** | **2.7** | **🔄 In Progress** |
-| **Phone Contact Import** | **2.7** | **� In Progress** |
-| Offline-First Storage | 2.2 | 🔲 Planned |
-| Message Sync to Cloud | 2.2 | 🔲 Planned |
+| **Phone Contact Import** | **2.7** | **🔄 In Progress** |
+| Offline-First Storage | 2.2 | ✅ Complete |
+| Message Sync to Cloud | 2.2 | 🔄 In Progress |
 
 ### 🟡 Medium Priority (Phase 2.5 / 3)
 
@@ -1188,6 +1188,15 @@ Have a feature request?
 
 ---
 
+## 📝 Recent Updates (February 2026)
+
+### February 9, 2026
+- ✅ Fixed sms_logs FK errors by ensuring user profile + membership before log push
+- ✅ Marketing logging stabilized (campaign_contact_id handling, opt-out/frequency checks)
+- ✅ Marketing campaign stats now load dynamically in UI
+- ✅ Added marketing campaign link on Send SMS screen
+- ✅ Settings screen cleanup and notification toggle completed
+
 ## 📝 Recent Updates (December 2025)
 
 ### December 28, 2025 - PHASE 2 COMPLETE! 🎉
@@ -1242,7 +1251,7 @@ Have a feature request?
 
 ## 🎯 IMMEDIATE NEXT STEPS
 
-### ✅ PHASE 2 COMPLETE! All tasks done.
+### ✅ PHASE 2 CORE COMPLETE! All core tasks done.
 
 **Completed December 28, 2025:**
 1. ✅ Database Setup - RLS policies applied
@@ -1253,11 +1262,18 @@ Have a feature request?
 6. ✅ API Security - Rate limiting active
 7. ✅ API Key Management - Full CRUD in Settings
 
+**Current Focus (Q1 2026):**
+1. � Stabilize RLS policies for user profile + tenant membership
+2. � Verify SMS log push reliability (online/offline)
+3. 🔄 Marketing analytics dashboard (campaign stats)
+4. 🔄 Phone contact import + CSV import
+5. 🔄 Web campaign sync and cross-device testing
+
 ---
 
-## 🚀 WHAT'S NEXT: Phase 2.7 - Auto Marketing Engine
+## 🚀 WHAT'S NEXT: Phase 2.7 - Marketing Automation Engine
 
-### Phase 2.7 - Auto Marketing Engine (Current Development Phase)
+### Phase 2.7 - Marketing Automation Engine (Current Development Phase)
 **Status:** 🔄 IN PROGRESS - Q1 2026
 
 **Goal:** Enable controlled, ethical SMS marketing campaigns via Android SIM with strict anti-spam safeguards.
@@ -1354,4 +1370,4 @@ Have a feature request?
 
 ---
 
-*Last Updated: December 28, 2025*
+*Last Updated: February 9, 2026*
