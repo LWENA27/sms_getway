@@ -30,6 +30,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? userId;
   SmsChannel selectedChannel = SmsChannel.thisPhone;
   bool autoStartApiQueue = false;
+  bool notificationsEnabled = true;
   final TenantService _tenantService = TenantService();
 
   @override
@@ -38,6 +39,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadUserInfo();
     _loadChannelPreference();
     _loadAutoStartPreference();
+    _loadNotificationPreference();
   }
 
   void _loadUserInfo() {
@@ -75,6 +77,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
       debugPrint('✅ Loaded API queue auto-start: $saved');
     } catch (e) {
       debugPrint('❌ Error loading auto-start preference: $e');
+    }
+  }
+
+  void _loadNotificationPreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final onSent = prefs.getBool('notification_on_sms_sent') ?? true;
+      final onFailed = prefs.getBool('notification_on_sms_failed') ?? true;
+      setState(() {
+        notificationsEnabled = onSent && onFailed;
+      });
+      debugPrint('✅ Loaded notification preferences');
+    } catch (e) {
+      debugPrint('❌ Error loading notification preferences: $e');
     }
   }
 
@@ -132,6 +148,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  void _saveNotificationPreference(bool value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('notification_on_sms_sent', value);
+      await prefs.setBool('notification_on_sms_failed', value);
+      setState(() {
+        notificationsEnabled = value;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              value ? 'Notifications enabled' : 'Notifications disabled',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error saving notification preference: $e')),
+        );
+      }
+      debugPrint('❌ Error saving notification preference: $e');
+    }
+  }
+
   void _showChannelDialog() {
     showDialog(
       context: context,
@@ -170,6 +213,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showHelpDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Help & Support'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Need help with SMS Gateway Pro?'),
+            SizedBox(height: 12),
+            Text('Email: support@example.com'),
+            Text('Docs: See API_DOCUMENTATION.md in the project'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
           ),
         ],
       ),
@@ -514,10 +582,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             leading: const Icon(Icons.notifications),
             title: const Text('Notifications'),
             trailing: Switch(
-              value: true,
-              onChanged: (value) {
-                // TODO: Implement notification toggle
-              },
+              value: notificationsEnabled,
+              onChanged: _saveNotificationPreference,
             ),
           ),
           Consumer<ThemeProvider>(
@@ -992,10 +1058,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: const Text('Help & Support'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
-              // TODO: Navigate to help screen
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Help & Support coming soon')),
-              );
+              _showHelpDialog();
             },
           ),
           const Divider(),

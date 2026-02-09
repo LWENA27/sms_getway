@@ -157,6 +157,7 @@ class TenantService extends ChangeNotifier {
     try {
       _currentTenant = tenant;
       await _saveToStorage();
+      await ensureUserProfileAndMembership();
       notifyListeners();
       debugPrint('✅ Selected tenant: ${tenant.name} (${tenant.id})');
       return true;
@@ -210,6 +211,38 @@ class TenantService extends ChangeNotifier {
       return _tenants.firstWhere((t) => t.id == id);
     } catch (e) {
       return null;
+    }
+  }
+
+  Future<void> ensureUserProfileAndMembership() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    final tenantId = _currentTenant?.id;
+
+    if (user == null || tenantId == null) return;
+
+    try {
+      final metadata = user.userMetadata ?? const {};
+      final name = metadata['name'] ?? metadata['full_name'];
+
+      await Supabase.instance.client.schema('sms_gateway').from('users').upsert({
+        'id': user.id,
+        'email': user.email,
+        'name': name,
+        'role': _currentTenant?.role ?? 'member',
+        'tenant_id': tenantId,
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'id');
+
+      await Supabase.instance.client
+          .schema('sms_gateway')
+          .from('tenant_members')
+          .upsert({
+        'tenant_id': tenantId,
+        'user_id': user.id,
+        'role': _currentTenant?.role ?? 'member',
+      }, onConflict: 'tenant_id,user_id');
+    } catch (e) {
+      debugPrint('❌ Error ensuring user profile: $e');
     }
   }
 }

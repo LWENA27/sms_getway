@@ -99,6 +99,20 @@ public class SupabaseClient {
         String response = makeRequest("PATCH", endpoint, data.toString());
         return new JSONArray(response);
     }
+
+    /**
+     * DELETE query
+     * 
+     * @param table Table name
+     * @param filter PostgREST filter (e.g. "id=eq.123")
+     * @return JSONArray of deleted rows (if return=representation)
+     */
+    public JSONArray delete(String table, String filter) throws Exception {
+        String endpoint = REST_API_URL + "/" + table + "?" + filter;
+        
+        String response = makeRequest("DELETE", endpoint, null);
+        return new JSONArray(response);
+    }
     
     /**
      * COUNT query (returns total count)

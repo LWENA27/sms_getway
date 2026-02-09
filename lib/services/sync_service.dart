@@ -382,6 +382,8 @@ class SyncService extends ChangeNotifier {
   Future<int> _pushSmsLogs(String tenantId) async {
     if (_db == null) return 0;
 
+    await _ensureUserProfile(tenantId);
+
     final pendingLogs = await _db!.getPendingSmsLogs(tenantId);
     if (pendingLogs.isEmpty) return 0;
 
@@ -418,6 +420,10 @@ class SyncService extends ChangeNotifier {
     }
 
     return count;
+  }
+
+  Future<void> _ensureUserProfile(String tenantId) async {
+    await TenantService().ensureUserProfileAndMembership();
   }
 
   /// Pull remote changes from Supabase

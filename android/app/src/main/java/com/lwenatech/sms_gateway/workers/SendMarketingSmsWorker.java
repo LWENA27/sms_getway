@@ -13,6 +13,7 @@ import androidx.work.WorkerParameters;
 import androidx.work.Data;
 
 import com.lwenatech.sms_gateway.services.MarketingSmsService;
+import com.lwenatech.sms_gateway.services.CampaignRepository;
 
 import java.util.concurrent.TimeUnit;
 
@@ -47,12 +48,14 @@ public class SendMarketingSmsWorker extends Worker {
     
     private static final String TAG = "SendMarketingSmsWorker";
     private static final String PREFS_NAME = "marketing_prefs";
+    private final CampaignRepository repository;
     
     public SendMarketingSmsWorker(
         @NonNull Context context,
         @NonNull WorkerParameters params
     ) {
         super(context, params);
+        this.repository = new CampaignRepository(context);
     }
     
     @NonNull
@@ -194,28 +197,26 @@ public class SendMarketingSmsWorker extends Worker {
     
     /**
      * Check if phone number has opted out
-     * TODO: Query Supabase marketing_optouts table
      */
     private boolean isOptedOut(Context context, String tenantId, String phoneNumber) {
-        // TODO: Implement Supabase query
-        // SELECT EXISTS (
-        //   SELECT 1 FROM sms_gateway.marketing_optouts
-        //   WHERE tenant_id = ? AND phone_number = ?
-        // );
-        return false; // Placeholder
+        try {
+            return repository.isOptedOut(tenantId, phoneNumber);
+        } catch (Exception e) {
+            android.util.Log.e(TAG, "Error checking opt-out: " + e.getMessage(), e);
+            return true; // Fail safe
+        }
     }
     
     /**
      * Check if frequency limit exceeded (2 SMS per 30 days)
-     * TODO: Query Supabase marketing_frequency_events table
      */
     private boolean exceedsFrequencyLimit(Context context, String tenantId, String phoneNumber) {
-        // TODO: Implement Supabase query
-        // SELECT COUNT(*) FROM sms_gateway.marketing_frequency_events
-        // WHERE tenant_id = ? AND phone_number = ?
-        //   AND sent_at >= NOW() - INTERVAL '30 days'
-        // Return true if count >= 2
-        return false; // Placeholder
+        try {
+            return repository.exceedsFrequencyLimit(tenantId, phoneNumber);
+        } catch (Exception e) {
+            android.util.Log.e(TAG, "Error checking frequency limit: " + e.getMessage(), e);
+            return true; // Fail safe
+        }
     }
     
     /**
@@ -244,9 +245,11 @@ public class SendMarketingSmsWorker extends Worker {
      */
     private void logSkipped(Context context, String campaignId, String phoneNumber, String reason) {
         android.util.Log.d(TAG, "Logging skipped: " + phoneNumber + " - " + reason);
-        
-        // TODO: Update marketing_campaign_contacts.status = 'skipped'
-        // TODO: Set failure_reason = reason
+        try {
+            repository.logSkipped(campaignId, phoneNumber, reason);
+        } catch (Exception e) {
+            android.util.Log.e(TAG, "Error logging skipped: " + e.getMessage(), e);
+        }
     }
     
     /**
@@ -254,10 +257,16 @@ public class SendMarketingSmsWorker extends Worker {
      */
     private void logFailure(Context context, String campaignId, String phoneNumber, String error) {
         android.util.Log.d(TAG, "Logging failure: " + phoneNumber + " - " + error);
-        
-        // TODO: Update marketing_campaign_contacts.status = 'failed'
-        // TODO: Set failure_reason = error
-        // TODO: Insert into marketing_logs with status = 'failed'
+        try {
+            String tenantId = tenantIdFromPrefs(context);
+            if (tenantId == null) {
+                android.util.Log.e(TAG, "Missing tenant ID while logging failure");
+                return;
+            }
+            repository.logFailure(tenantId, campaignId, phoneNumber, error);
+        } catch (Exception e) {
+            android.util.Log.e(TAG, "Error logging failure: " + e.getMessage(), e);
+        }
     }
     
     /**
@@ -276,27 +285,22 @@ public class SendMarketingSmsWorker extends Worker {
     
     /**
      * Record frequency event for 30-day tracking
-     * TODO: Insert into marketing_frequency_events table
      */
     private void recordFrequencyEvent(Context context, String tenantId, String campaignId,
                                      String phoneNumber, String messagePreview) {
         android.util.Log.d(TAG, "Recording frequency event: " + phoneNumber);
-        
-        // TODO: INSERT INTO sms_gateway.marketing_frequency_events (
-        //   tenant_id, phone_number, campaign_id, sent_at, message_preview
-        // ) VALUES (?, ?, ?, NOW(), SUBSTRING(?, 1, 100));
+        repository.recordFrequencyEvent(tenantId, campaignId, phoneNumber, messagePreview);
     }
     
     /**
      * Sync logs to Supabase (async operation)
-     * TODO: Implement batch sync of local logs to Supabase
      */
     private void syncLogsToSupabase(Context context) {
-        android.util.Log.d(TAG, "Syncing logs to Supabase (TODO)");
-        
-        // TODO: Implement async sync
-        // 1. Get all unsynced logs from local SQLite
-        // 2. Batch insert to Supabase
-        // 3. Mark as synced in local DB
+        android.util.Log.d(TAG, "Sync not required: logs are written directly to Supabase");
+    }
+
+    private String tenantIdFromPrefs(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        return prefs.getString("tenant_id", null);
     }
 }

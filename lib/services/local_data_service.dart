@@ -41,6 +41,14 @@ class LocalDataService {
   // Check if running on web
   bool get isWeb => kIsWeb;
 
+  String? _getAuthUserId() {
+    return Supabase.instance.client.auth.currentUser?.id;
+  }
+
+  Future<void> _ensureUserProfile(String tenantId) async {
+    await TenantService().ensureUserProfileAndMembership();
+  }
+
   // ============================================================================
   // INITIALIZATION
   // ============================================================================
@@ -236,7 +244,7 @@ class LocalDataService {
   Future<Map<String, int>> importContacts(
       List<Map<String, String>> contacts) async {
     final tenantId = TenantService().tenantId;
-    final userId = TenantService().currentTenant?.clientId;
+    final userId = _getAuthUserId();
 
     if (tenantId == null || userId == null) {
       throw Exception('No tenant selected');
@@ -344,7 +352,7 @@ class LocalDataService {
     required List<String> contactIds,
   }) async {
     final tenantId = TenantService().tenantId;
-    final userId = TenantService().currentTenant?.clientId;
+    final userId = _getAuthUserId();
 
     if (tenantId == null || userId == null) {
       throw Exception('No tenant selected');
@@ -570,7 +578,7 @@ class LocalDataService {
     String? channel,
   }) async {
     final tenantId = TenantService().tenantId;
-    final userId = TenantService().currentTenant?.clientId;
+    final userId = _getAuthUserId();
 
     if (tenantId == null || userId == null) {
       throw Exception('No tenant selected');
@@ -582,6 +590,7 @@ class LocalDataService {
     // On web, insert directly to Supabase (SMS won't actually be sent on web)
     if (kIsWeb || db == null) {
       try {
+        await _ensureUserProfile(tenantId);
         await _supabase.schema('sms_gateway').from('sms_logs').insert({
           'id': id,
           'tenant_id': tenantId,

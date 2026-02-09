@@ -36,8 +36,10 @@ class AppConstants {
 
   // ===== QUICKSMS API CONFIGURATION =====
   static const String quickSmsBaseUrl = 'https://api.quicksms.com.ng/v1';
-  // TODO: Add your QuickSMS API key here
-  static const String quickSmsApiKey = 'YOUR_QUICKSMS_API_KEY_HERE';
+  static const String quickSmsApiKey = String.fromEnvironment(
+    'QUICKSMS_API_KEY',
+    defaultValue: 'YOUR_QUICKSMS_API_KEY_HERE',
+  );
   static const String quickSmsSenderId = 'SMS_GATEWAY';
 
   // ===== RATE LIMITING =====

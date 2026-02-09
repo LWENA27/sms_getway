@@ -229,9 +229,10 @@
     },
     {
       "name": "file_picker",
-      "version": "8.3.7",
+      "version": "10.3.10",
       "dependencies": [
         "cross_file",
+        "dbus",
         "ffi",
         "flutter",
         "flutter_plugin_android_lifecycle",
@@ -982,8 +983,18 @@
       ]
     },
     {
+      "name": "dbus",
+      "version": "0.7.11",
+      "dependencies": [
+        "args",
+        "ffi",
+        "meta",
+        "xml"
+      ]
+    },
+    {
       "name": "cross_file",
-      "version": "0.3.5+1",
+      "version": "0.3.5+2",
       "dependencies": [
         "meta",
         "web"
@@ -1421,13 +1432,12 @@
       ]
     },
     {
-      "name": "dbus",
-      "version": "0.7.11",
+      "name": "xml",
+      "version": "6.6.1",
       "dependencies": [
-        "args",
-        "ffi",
+        "collection",
         "meta",
-        "xml"
+        "petitparser"
       ]
     },
     {
@@ -1441,15 +1451,6 @@
       "dependencies": [
         "meta",
         "path"
-      ]
-    },
-    {
-      "name": "xml",
-      "version": "6.6.1",
-      "dependencies": [
-        "collection",
-        "meta",
-        "petitparser"
       ]
     },
     {

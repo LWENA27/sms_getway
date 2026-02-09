@@ -6,7 +6,9 @@ import androidx.work.ExistingPeriodicWorkPolicy;
 import androidx.work.NetworkType;
 import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
+import androidx.work.WorkInfo;
 import java.util.concurrent.TimeUnit;
+import java.util.List;
 
 /**
  * Marketing Automation Coordinator
@@ -92,9 +94,22 @@ public class MarketingCoordinator {
      * @return true if scheduled, false otherwise
      */
     public static boolean isScheduled(Context context) {
-        // Note: This is a simplified check
-        // For full status, query WorkManager work info
-        return true; // TODO: Implement actual check
+        try {
+            List<WorkInfo> infos = WorkManager.getInstance(context)
+                .getWorkInfosForUniqueWork(WORK_NAME)
+                .get();
+
+            for (WorkInfo info : infos) {
+                WorkInfo.State state = info.getState();
+                if (state == WorkInfo.State.ENQUEUED || state == WorkInfo.State.RUNNING) {
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            android.util.Log.e(TAG, "Error checking schedule status: " + e.getMessage(), e);
+        }
+
+        return false;
     }
     
     /**

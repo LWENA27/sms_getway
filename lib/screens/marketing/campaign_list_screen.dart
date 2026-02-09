@@ -72,8 +72,10 @@ class _CampaignListScreenState extends State<CampaignListScreen> {
           .map((json) => MarketingCampaign.fromJson(json))
           .toList();
 
+      final campaignsWithStats = await _loadCampaignStats(campaigns);
+
       setState(() {
-        _campaigns = campaigns;
+        _campaigns = campaignsWithStats;
         _loading = false;
       });
     } catch (e) {
@@ -82,6 +84,44 @@ class _CampaignListScreenState extends State<CampaignListScreen> {
         _loading = false;
       });
     }
+  }
+
+  Future<List<MarketingCampaign>> _loadCampaignStats(
+      List<MarketingCampaign> campaigns) async {
+    final updatedCampaigns = <MarketingCampaign>[];
+
+    for (final campaign in campaigns) {
+      try {
+        final totalResponse = await _supabase
+            .schema('sms_gateway')
+            .from('marketing_campaign_contacts')
+            .select('id')
+            .eq('campaign_id', campaign.id)
+            .count(CountOption.exact);
+
+        final sentResponse = await _supabase
+            .schema('sms_gateway')
+            .from('marketing_campaign_contacts')
+            .select('id')
+            .eq('campaign_id', campaign.id)
+            .eq('status', 'sent')
+            .count(CountOption.exact);
+
+        final totalCount = totalResponse.count ?? campaign.totalContactCount;
+        final sentCount = sentResponse.count ?? campaign.totalSentCount;
+
+        updatedCampaigns.add(
+          campaign.copyWith(
+            totalContactCount: totalCount,
+            totalSentCount: sentCount,
+          ),
+        );
+      } catch (e) {
+        updatedCampaigns.add(campaign);
+      }
+    }
+
+    return updatedCampaigns;
   }
 
   Future<void> _toggleCampaignStatus(MarketingCampaign campaign) async {

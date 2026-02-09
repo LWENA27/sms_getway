@@ -195,21 +195,31 @@ public class CampaignRepository {
     public boolean exceedsFrequencyLimit(String tenantId, String phoneNumber) {
         try {
             android.util.Log.d(TAG, "Checking frequency limit: " + phoneNumber);
-            
-            // Count events in last 30 days
-            String thirtyDaysAgo = getTimestamp30DaysAgo();
-            String filter = "tenant_id=eq." + tenantId + 
-                           "&phone_number=eq." + phoneNumber +
-                           "&sent_at=gte." + thirtyDaysAgo;
-            
-            int count = supabase.count("marketing_frequency_events", filter);
-            
+            int count = getFrequencyCount(tenantId, phoneNumber);
+
             android.util.Log.d(TAG, "Frequency count (30 days): " + count + "/2");
             return count >= 2;
             
         } catch (Exception e) {
             android.util.Log.e(TAG, "Error checking frequency limit: " + e.getMessage(), e);
             return true; // Fail safe: assume limit exceeded on error
+        }
+    }
+
+    /**
+     * Get frequency event count for last 30 days
+     */
+    public int getFrequencyCount(String tenantId, String phoneNumber) {
+        try {
+            String thirtyDaysAgo = getTimestamp30DaysAgo();
+            String filter = "tenant_id=eq." + tenantId + 
+                           "&phone_number=eq." + phoneNumber +
+                           "&sent_at=gte." + thirtyDaysAgo;
+
+            return supabase.count("marketing_frequency_events", filter);
+        } catch (Exception e) {
+            android.util.Log.e(TAG, "Error getting frequency count: " + e.getMessage(), e);
+            return 2; // Fail safe: assume limit reached
         }
     }
     
@@ -246,6 +256,67 @@ public class CampaignRepository {
             defaults.put("enabled", false);
             defaults.put("daily_limit", 100);
             return defaults;
+        }
+    }
+
+    /**
+     * Add phone number to opt-out list
+     */
+    public void addOptOut(String tenantId, String phoneNumber) {
+        try {
+            android.util.Log.d(TAG, "Adding opt-out: " + phoneNumber);
+            android.content.SharedPreferences prefs = 
+                context.getSharedPreferences("marketing_prefs", Context.MODE_PRIVATE);
+            String userId = prefs.getString("user_id", null);
+
+            JSONObject data = new JSONObject();
+            data.put("tenant_id", tenantId);
+            data.put("phone_number", phoneNumber);
+            data.put("method", "manual");
+            if (userId != null) {
+                data.put("added_by", userId);
+            }
+
+            supabase.insert("marketing_optouts", data);
+        } catch (Exception e) {
+            android.util.Log.e(TAG, "Error adding opt-out: " + e.getMessage(), e);
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Remove phone number from opt-out list
+     */
+    public void removeOptOut(String tenantId, String phoneNumber) {
+        try {
+            android.util.Log.d(TAG, "Removing opt-out: " + phoneNumber);
+            String filter = "tenant_id=eq." + tenantId + "&phone_number=eq." + phoneNumber;
+            supabase.delete("marketing_optouts", filter);
+        } catch (Exception e) {
+            android.util.Log.e(TAG, "Error removing opt-out: " + e.getMessage(), e);
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Record a frequency event for tracking limits
+     */
+    public void recordFrequencyEvent(String tenantId, String campaignId, String phoneNumber,
+                                     String messagePreview) {
+        try {
+            JSONObject freqData = new JSONObject();
+            freqData.put("tenant_id", tenantId);
+            freqData.put("phone_number", phoneNumber);
+            if (campaignId != null) {
+                freqData.put("campaign_id", campaignId);
+            }
+            if (messagePreview != null) {
+                freqData.put("message_preview",
+                    messagePreview.substring(0, Math.min(100, messagePreview.length())));
+            }
+            supabase.insert("marketing_frequency_events", freqData);
+        } catch (Exception e) {
+            android.util.Log.e(TAG, "Error recording frequency event: " + e.getMessage(), e);
         }
     }
     

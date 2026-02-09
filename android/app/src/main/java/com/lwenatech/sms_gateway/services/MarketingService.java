@@ -215,9 +215,7 @@ public class MarketingService {
     public void addOptOut(String tenantId, String phoneNumber) {
         try {
             android.util.Log.i(TAG, "Adding opt-out: " + phoneNumber);
-            
-            // TODO: Implement via repository
-            // repository.addOptOut(tenantId, phoneNumber);
+            repository.addOptOut(tenantId, phoneNumber);
             
         } catch (Exception e) {
             android.util.Log.e(TAG, "Error adding opt-out: " + e.getMessage(), e);
@@ -234,9 +232,7 @@ public class MarketingService {
     public void removeOptOut(String tenantId, String phoneNumber) {
         try {
             android.util.Log.i(TAG, "Removing opt-out: " + phoneNumber);
-            
-            // TODO: Implement via repository
-            // repository.removeOptOut(tenantId, phoneNumber);
+            repository.removeOptOut(tenantId, phoneNumber);
             
         } catch (Exception e) {
             android.util.Log.e(TAG, "Error removing opt-out: " + e.getMessage(), e);

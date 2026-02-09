@@ -195,7 +195,7 @@
     },
     {
       "name": "cross_file",
-      "rootUri": "file:///home/lwena/.pub-cache/hosted/pub.dev/cross_file-0.3.5+1",
+      "rootUri": "file:///home/lwena/.pub-cache/hosted/pub.dev/cross_file-0.3.5+2",
       "packageUri": "lib/",
       "languageVersion": "3.8"
     },
@@ -297,7 +297,7 @@
     },
     {
       "name": "file_picker",
-      "rootUri": "file:///home/lwena/.pub-cache/hosted/pub.dev/file_picker-8.3.7",
+      "rootUri": "file:///home/lwena/.pub-cache/hosted/pub.dev/file_picker-10.3.10",
       "packageUri": "lib/",
       "languageVersion": "3.4"
     },

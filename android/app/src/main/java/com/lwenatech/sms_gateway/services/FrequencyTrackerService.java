@@ -121,10 +121,9 @@ public class FrequencyTrackerService {
     public int getRemainingQuota(String tenantId, String phoneNumber) {
         try {
             android.util.Log.d(TAG, "Calculating remaining quota: " + phoneNumber);
-            
-            // TODO: Query frequency events for last 30 days
-            // For now, return placeholder
-            return 2; // Placeholder
+            int count = repository.getFrequencyCount(tenantId, phoneNumber);
+            int remaining = 2 - count;
+            return Math.max(0, remaining);
             
         } catch (Exception e) {
             android.util.Log.e(TAG, "Error calculating quota: " + e.getMessage(), e);
