@@ -10,6 +10,7 @@ import '../services/web_sms_service.dart';
 import '../api/native_sms_service.dart';
 import '../contacts/contact_model.dart';
 import '../groups/group_model.dart';
+import 'marketing/campaign_list_screen.dart';
 import 'download_app_banner.dart';
 
 class BulkSmsScreen extends StatefulWidget {
@@ -442,6 +443,21 @@ class _BulkSmsScreenState extends State<BulkSmsScreen> {
                   // Download App Banner for web users
                   const DownloadAppBannerCompact(),
                   const SizedBox(height: AppTheme.paddingMedium),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const CampaignListScreen(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.campaign),
+                      label: const Text('Marketing Campaigns'),
+                    ),
+                  ),
+                  const SizedBox(height: AppTheme.paddingSmall),
                   // Mode selector
                   Text(
                     'Mode',
